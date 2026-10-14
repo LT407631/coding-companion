@@ -27,6 +27,12 @@
       '<div class="library-footer"><span class="note search-status" role="status" aria-live="polite"></span><button class="ghost search-more" type="button">加载更多</button></div>';
     var grid = root.querySelector('.search-grid'), more = root.querySelector('.search-more'), note = root.querySelector('.search-status');
     function live() { return active === current && grid.isConnected; }
+    function failureMessage(error) {
+      var message = String(error && error.message || '');
+      if (error && error.name === 'AbortError' || /abort(?:ed|error)/i.test(message)) return '搜索响应超时，请重试';
+      if (/failed to fetch|load failed|networkerror/i.test(message)) return '搜索服务连接失败，请重试';
+      return message || '搜索失败，请重试';
+    }
     function status(error) {
       grid.hidden = !state.items.length;
       root.querySelector('.search-empty').hidden = !state.loaded || !!state.items.length || current.busy || !!error;
@@ -59,7 +65,7 @@
       } catch (error) {
         if (!live()) return;
         current.busy = false; current.expired = error.status === 410; state.restart = current.expired;
-        status(current.expired ? '搜索缓存已更新，请重新搜索；已显示结果仍可打开' : error.message || '搜索失败，请重试');
+        status(current.expired ? '搜索缓存已更新，请重新搜索；已显示结果仍可打开' : failureMessage(error));
       } finally { if (live()) current.controller = null; }
     }
     more.onclick = function() {

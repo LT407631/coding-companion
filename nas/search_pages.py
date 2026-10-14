@@ -132,6 +132,8 @@ class SearchPages:
         if not isinstance(tabs, list):
             raise ValueError('Missing upstream search tabs')
         if not tabs:
+            if self.fallback is not None and not state['pages']:
+                return self._fallback(state)
             return Payload(json_bytes({'query': state['query'], 'results': [], 'has_more': False, 'next_cursor': None}))
         tab = tabs[0]
         if not isinstance(tab, dict) or not isinstance(tab.get('data'), list) or 'has_more' not in tab:
@@ -165,6 +167,8 @@ class SearchPages:
         visited = state['visited'] + [_token(state)]
         pages = state['pages'] + 1
         empty_pages = 0 if results else state['empty_pages'] + 1
+        if not results and not bool(tab['has_more']) and self.fallback is not None and not state['pages']:
+            return self._fallback(state)
         resume = dict(state, offset=offset, passback=passback, search_id=search_id,
                       seen=sorted(seen), visited=visited, pages=pages, empty_pages=empty_pages)
         # An empty/duplicate page can still advance. Stop cycles and bounded runs

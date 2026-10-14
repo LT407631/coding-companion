@@ -49,7 +49,14 @@ tv_compat = TvCompatibilityCache(Path(server.H.OUT_DIR) / ".tv_compat")
 
 
 catalog = CatalogCache(Path(server.H.OUT_DIR) / ".catalog_cache")
-search_pages = install_search(app, source, catalog, HongguoWebSearch())
+
+
+def search_detail(series_id):
+    return source.run(lambda: server.H.get_episodes(series_id)[0], budget=7)
+
+
+search_pages = install_search(app, source, catalog,
+                              HongguoWebSearch(resolve=search_detail))
 install_library(app, server.H, catalog)
 watch_state = WatchState(Path(server.H.OUT_DIR) / '.watch_state.sqlite3')
 def follow_count(sid):

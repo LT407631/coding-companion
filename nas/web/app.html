@@ -559,7 +559,7 @@
 <script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/library.js?v=8"></script>
 <script src="/ui/assets/device-media.js?v=direct-1"></script>
 <script src="/ui/assets/seasons.js?v=1"></script><script src="/ui/assets/settings.js?v=4"></script><script src="/ui/assets/page-requests.js?v=1"></script>
-<script src="/ui/assets/search.js?v=1"></script><script src="/ui/assets/playback-status.js?v=2"></script>
+<script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=2"></script>
 <script>
 'use strict';
 /* ================= 基础 ================= */
@@ -641,7 +641,10 @@ function toast(msg, ms=2200) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms);
 }
-function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+function go(hash) {
+  if (location.hash === hash) route();
+  else { history.pushState({codingRoute: true}, '', hash); route(); }
+}
 function doSearch() {
   const v = $('#q').value.trim();
   if (v) go('#/search/' + encodeURIComponent(v));
@@ -1194,6 +1197,7 @@ function switchGenre(g) {
 
 /* ================= 路由 ================= */
 function route() {
+  routedLocation = location.href;
   discoverVersion++; CodingLibrary.stop();
   CodingSettings.stop(); CodingPageRequests.stop();
   CodingSearch.stop();
@@ -1218,7 +1222,10 @@ function route() {
   else if (view === 'settings') vSettings();
   else vDiscover();
 }
-window.addEventListener('hashchange', route);
+let routedLocation = '';
+function routeFromHistory() { if (routedLocation !== location.href) route(); }
+window.addEventListener('popstate', routeFromHistory);
+window.addEventListener('hashchange', routeFromHistory);
 route();
 </script>
 </body>

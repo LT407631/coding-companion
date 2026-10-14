@@ -104,6 +104,17 @@ class SearchPageTests(unittest.TestCase):
         self.assertEqual(self.page('尸帝')[0], result)
         self.assertEqual(len(self.source.calls), 1)
 
+    def test_first_page_uses_fallback_when_primary_returns_no_terminal_results(self):
+        fallback = Fallback([{'series_id': '6906763079292292104', 'title': '尸帝'}])
+        self.search = SearchPages(self.source, self.cache, fallback)
+        for query, response in (('无标签', {'search_tabs': []}),
+                                ('空结果', reply([], False, 0))):
+            self.source.replies = [response]
+            result, _ = self.page(query)
+            self.assertTrue(result['source_fallback'])
+            self.assertEqual(result['results'][0]['title'], '尸帝')
+        self.assertEqual(fallback.calls, ['无标签', '空结果'])
+
     def test_deduplicates_across_pages_and_preserves_provider_pagination(self):
         self.source.replies = [reply([1, 1, 2], True, 40, passback='opaque', search_id='s1'), reply([2, 3])]
         first, _ = self.page()
