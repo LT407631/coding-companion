@@ -40,29 +40,55 @@
   'use strict';
   // Only browser playback: TV owns its native transition and rendering feedback.
   function create(w, video, overlay) {
-    var snapshot = null, replay = null, checked = 0, timer = 0, controlsSuppressed = false, controlsWereEnabled = false;
-    // WebKit reveals native controls when a new source is assigned; restore them only on viewer intent.
-    var intentEvents = ['pointermove', 'mousemove', 'mousedown', 'touchstart', 'keydown'];
+    var snapshot = null, replay = null, checked = 0, timer = 0, controlsTimer = 0;
+    var controlsSuppressed = false, controlsWereEnabled = false, controlsReady = false;
+    var pointerX = null, pointerY = null, pointerOriginX = null, pointerOriginY = null;
+    var intentEvents = ['pointerdown', 'mousedown', 'touchstart', 'keydown'];
+    var movementEvents = ['pointermove', 'mousemove'];
     overlay = overlay || document.querySelector('#vload');
     function cancel() { clearTimeout(timer); timer = 0; }
     function restoreControls() {
       if (!controlsSuppressed) return;
       controlsSuppressed = false;
+      controlsReady = false;
+      clearTimeout(controlsTimer); controlsTimer = 0;
       intentEvents.forEach(function (name) { document.removeEventListener(name, restoreControls, true); });
       if (controlsWereEnabled) video.controls = true;
       controlsWereEnabled = false;
     }
+    function trackPointer(event) {
+      if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
+      pointerX = event.clientX; pointerY = event.clientY;
+      if (!controlsSuppressed || !controlsReady) return;
+      if (pointerOriginX === null || pointerOriginY === null) {
+        pointerOriginX = pointerX; pointerOriginY = pointerY; return;
+      }
+      var dx = pointerX - pointerOriginX, dy = pointerY - pointerOriginY;
+      if (dx * dx + dy * dy >= 16) restoreControls();
+    }
+    movementEvents.forEach(function (name) { document.addEventListener(name, trackPointer, true); });
     function suppressControls() {
       restoreControls();
       if (!video || !('controls' in video) || !video.controls) return;
       controlsWereEnabled = true;
       controlsSuppressed = true;
+      controlsReady = false;
+      pointerOriginX = pointerX; pointerOriginY = pointerY;
       video.controls = false;
       intentEvents.forEach(function (name) { document.addEventListener(name, restoreControls, true); });
     }
     function switching(automatic) { if (automatic) suppressControls(); else restoreControls(); }
     function show() { cancel(); restoreControls(); overlay.style.display = 'flex'; }
     function hide() { cancel(); overlay.style.display = 'none'; }
+    function playing() {
+      hide();
+      if (!controlsSuppressed) return;
+      clearTimeout(controlsTimer);
+      controlsTimer = setTimeout(function () {
+        controlsTimer = 0; controlsReady = true;
+        pointerOriginX = pointerX; pointerOriginY = pointerY;
+      }, 300);
+    }
     function waiting() {
       if (timer || !w.alive) return;
       var token = w.token;
@@ -81,8 +107,11 @@
         replay = w.mode === 'nas' ? Object.assign({}, snapshot, {current: snapshot.episodes[n]}) : null;
         return replay;
       },
-      switching: switching, waiting: waiting, show: show, hide: hide,
-      stop: function () { cancel(); restoreControls(); }
+      switching: switching, waiting: waiting, playing: playing, show: show, hide: hide,
+      stop: function () {
+        cancel(); restoreControls();
+        movementEvents.forEach(function (name) { document.removeEventListener(name, trackPointer, true); });
+      }
     };
   }
   window.CodingWebTransition = {create: create};

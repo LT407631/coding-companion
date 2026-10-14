@@ -559,7 +559,7 @@
 <script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/library.js?v=8"></script>
 <script src="/ui/assets/device-media.js?v=direct-1"></script>
 <script src="/ui/assets/seasons.js?v=1"></script><script src="/ui/assets/settings.js?v=4"></script><script src="/ui/assets/page-requests.js?v=1"></script>
-<script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=3"></script>
+<script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=4"></script>
 <script>
 'use strict';
 /* ================= 基础 ================= */
@@ -996,7 +996,6 @@ W.bind = () => {
     W.mediaReady = false; W.metadataReady = false; W.finished = false; W.saveT = null;
     if (!automatic && !retry) W.completed = 0;
     if (!retry) mediaRetry = 0;
-    // Suppress the browser's source-change controls only for automatic episode handoff.
     transition?.switching(automatic);
     v.pause(); v.removeAttribute('src'); v.load();
     W.ep = n; W.activeEp = 0; W.token++; pollFailures = 0; pollFailureAt = 0;
@@ -1059,7 +1058,7 @@ W.bind = () => {
     if (v.defaultPlaybackRate !== W.speed) v.defaultPlaybackRate = W.speed;
   });
   v.addEventListener('waiting', () => { if (transition) transition.waiting(); else $('#vload').style.display = 'flex'; });
-  v.addEventListener('playing', () => { if (W.alive && W.client === client) { transition?.hide(); $('#vload').style.display = 'none'; } });
+  v.addEventListener('playing', () => { if (W.alive && W.client === client) { transition?.playing(); $('#vload').style.display = 'none'; } });
   v.addEventListener('loadedmetadata', () => {
     if (!W.alive || W.client !== client || W.activeEp !== W.ep || !v.getAttribute('src')) return;
     W.metadataReady = true;
