@@ -40,10 +40,28 @@
   'use strict';
   // Only browser playback: TV owns its native transition and rendering feedback.
   function create(w, video, overlay) {
-    var snapshot = null, replay = null, checked = 0, timer = 0;
+    var snapshot = null, replay = null, checked = 0, timer = 0, controlsSuppressed = false, controlsWereEnabled = false;
+    // WebKit reveals native controls when a new source is assigned; restore them only on viewer intent.
+    var intentEvents = ['pointermove', 'mousemove', 'mousedown', 'touchstart', 'keydown'];
     overlay = overlay || document.querySelector('#vload');
     function cancel() { clearTimeout(timer); timer = 0; }
-    function show() { cancel(); overlay.style.display = 'flex'; }
+    function restoreControls() {
+      if (!controlsSuppressed) return;
+      controlsSuppressed = false;
+      intentEvents.forEach(function (name) { document.removeEventListener(name, restoreControls, true); });
+      if (controlsWereEnabled) video.controls = true;
+      controlsWereEnabled = false;
+    }
+    function suppressControls() {
+      restoreControls();
+      if (!video || !('controls' in video) || !video.controls) return;
+      controlsWereEnabled = true;
+      controlsSuppressed = true;
+      video.controls = false;
+      intentEvents.forEach(function (name) { document.addEventListener(name, restoreControls, true); });
+    }
+    function switching(automatic) { if (automatic) suppressControls(); else restoreControls(); }
+    function show() { cancel(); restoreControls(); overlay.style.display = 'flex'; }
     function hide() { cancel(); overlay.style.display = 'none'; }
     function waiting() {
       if (timer || !w.alive) return;
@@ -63,7 +81,8 @@
         replay = w.mode === 'nas' ? Object.assign({}, snapshot, {current: snapshot.episodes[n]}) : null;
         return replay;
       },
-      waiting: waiting, show: show, hide: hide, stop: cancel
+      switching: switching, waiting: waiting, show: show, hide: hide,
+      stop: function () { cancel(); restoreControls(); }
     };
   }
   window.CodingWebTransition = {create: create};
