@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer"><title>手机输入 · coding伴侣</title>
+<style>
+*{box-sizing:border-box} :root{color-scheme:dark}body{margin:0;background:#111318;color:#edf0f5;font-family:-apple-system,"PingFang SC",sans-serif;padding: max(32px,env(safe-area-inset-top)) 22px max(24px,env(safe-area-inset-bottom))}main{max-width:440px;margin:7vh auto}.brand{color:#ff527b;font-weight:700;font-size:23px;margin-bottom:40px}h1{font-size:30px;margin:0 0 14px}p{color:#aeb7c8;line-height:1.7;font-size:16px}label{display:block;margin:32px 0 12px}input,button{font:inherit;width:100%;min-height:56px;border-radius:13px}input{padding:16px;background:#252932;border:1px solid #454c5c;color:#fff;font-size:18px}input:focus{outline:2px solid #ff527b;outline-offset:2px}button{margin-top:18px;border:0;background:#ff2e5f;color:#fff;font-weight:600;font-size:18px;cursor:pointer}button:disabled{opacity:.5}#status{min-height:48px;margin-top:22px;line-height:1.6;color:#b8c4d5}.foot{font-size:13px;margin-top:36px;color:#8995a7}@media(prefers-color-scheme:light){:root{color-scheme:light}body{background:#f5f6f8;color:#20232c}input{background:white;color:#20232c;border-color:#ccd1dc}p,#status{color:#5d687a}.foot{color:#69768a}}
+</style>
+</head>
+<body><main>
+<div class="brand">coding伴侣</div><h1>在电视上搜索</h1>
+<p>用手机键盘输入、粘贴，或点键盘上的麦克风说出剧名。</p>
+<form id="phone-form"><label for="keyword">剧名或演员</label><input id="keyword" maxlength="80" required enterkeyhint="search" autocomplete="off" placeholder="输入想看的内容"><button id="send" type="submit">发送到电视</button></form>
+<div id="status" role="status" aria-live="polite"></div>
+<p class="foot">本次配对有效期 15 分钟。可连续搜索；电视取消配对后，此页面失效。</p>
+</main><script src="/phone-input/client.js"></script></body>
+</html>

@@ -1,0 +1,22 @@
+.library-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.library-orders { display:flex; gap:8px; }
+.library-order.on { color:var(--pink); border-color:var(--pink-border); background:var(--pink-soft); }
+.library-themes { margin-bottom:22px; }
+.library-footer { display:flex; flex-direction:column; align-items:center; gap:14px; padding:28px 0 40px; min-height:130px; }
+.library-more[aria-disabled="true"] { opacity:.6; }
+.coding-tv .library-toolbar { margin-bottom:20px; }
+.coding-tv .library-orders button { font-size:26px; padding:12px 24px; }
+.coding-tv .library-count,.coding-tv .library-status { font-size:22px; }
+.coding-tv .library-more { font-size:26px; padding:14px 36px; }
+@media (max-width:600px) {
+  .library-toolbar { flex-wrap:wrap; gap:10px; }
+  .library-orders { flex:1; }
+  .library-orders button { flex:1; white-space:nowrap; }
+  .library-count { font-size:12px; }
+}
+
+/* Uniform rows let the window release offscreen posters without scroll jumps. */
+.library-grid .ctitle { height: 2.9em; }
+.library-grid .cmeta { height: 1.5em; flex-wrap: nowrap; }
+.library-spacer { grid-column: 1 / -1; pointer-events: none; }
+@media (max-width:600px) { .library-grid .ctitle { height: calc(2.9em + 8px); } }

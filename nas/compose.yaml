@@ -1,0 +1,41 @@
+name: hongguo
+services:
+  sign:
+    image: hongguo-nas:1.0.3-local
+    build: .
+    user: "1000:1001"
+    working_dir: /app/run/sign
+    command: ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "-cp", "unidbg-sign.jar", "com.hongguo.sign.FqTrace", "serve", "9099"]
+    environment:
+      BIND_HOST: 0.0.0.0
+      JAVA_TOOL_OPTIONS: "-Xmx512m -Djava.awt.headless=true"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  api:
+    image: hongguo-nas:1.0.3-local
+    user: "1000:1001"
+    depends_on: [sign]
+    environment:
+      SIGN_SERVER: http://sign:9099
+      BIND_HOST: 0.0.0.0
+      PORT: "8000"
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+      APIKEYS_PATH: /app/run/app/downloads/.apikeys.json
+    volumes:
+      - ./private/config.json:/app/run/app/config.json:ro
+      - ./data/downloads:/app/run/app/downloads
+    ports:
+      - "${NAS_BIND_IP:-127.0.0.1}:8010:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=20).read()"]
+      interval: 60s
+      timeout: 25s
+      start_period: 90s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

@@ -1,0 +1,149 @@
+/* Loaded only by the TV APK; the NAS website stays unchanged. */
+html.coding-tv { scroll-padding: 110px 24px 30px; }
+html.coding-tv body { font-size: 24px; }
+html.coding-tv .side { width: 88px; padding: 24px 8px; }
+html.coding-tv .main { margin-left: 88px; }
+html.coding-tv .nav { font-size: 18px; padding: 14px 0; border-radius: 10px; }
+html.coding-tv .nav svg { width: 28px; height: 28px; }
+html.coding-tv .top { min-height: 88px; height: auto; padding: 16px 24px; gap: 0; }
+html.coding-tv .top > * { margin-right: 16px; }
+html.coding-tv .top > :last-child { margin-right: 0; }
+html.coding-tv .brand { font-size: 28px; }
+html.coding-tv .gtab { font-size: 24px; padding: 12px 8px; }
+html.coding-tv .searchbox { max-width: 300px; }
+html.coding-tv input, html.coding-tv select { font-size: 24px; min-height: 48px; }
+html.coding-tv button, html.coding-tv .ghost, html.coding-tv .btn-pink { font-size: 24px; min-height: 48px; }
+html.coding-tv .tv-fav-state { flex: none; margin-left: 8px; padding-top: 3px; color: var(--muted); font-size: 16px; line-height: 1.4; white-space: nowrap; pointer-events: none; }
+html.coding-tv .tv-fav-state.on { color: var(--pink); }
+html.coding-tv .view { padding: 24px 28px; max-width: none; }
+html.coding-tv .grid { grid-template-columns: repeat(8,minmax(0,1fr)); gap: 26px 18px; }
+html.coding-tv .ctitle { font-size: 22px; line-height: 1.4; }
+html.coding-tv .ctags, html.coding-tv .ceps, html.coding-tv .note, html.coding-tv .season-note { font-size: 18px; }
+html.coding-tv .pill { font-size: 16px; }
+html.coding-tv .chip { font-size: 22px; padding: 8px 18px; }
+html.coding-tv .sechead h2 { font-size: 28px; }
+html.coding-tv .ep { min-height: 48px; font-size: 20px; }
+html.coding-tv body.watching .view { padding: 0; }
+html.coding-tv .watch .epdrawer { width: 380px; max-width: 36%; }
+html.coding-tv .watch-heading .wt, html.coding-tv .watch-series, html.coding-tv .watch-position { font-size: 24px; }
+html.coding-tv .watch-actions { flex-wrap: wrap; gap: 12px; }
+html.coding-tv .watch-actions button { font-size: 22px; padding: 10px 12px; }
+html.coding-tv .epdrawer .dh { font-size: 24px; }
+html.coding-tv .ditem { min-height: 60px; padding: 12px; }
+html.coding-tv .ditem .no { font-size: 24px; }
+html.coding-tv .ditem .dt { font-size: 20px; }
+/* Explicit edges center preparation/error feedback on older TV WebViews without inset. */
+html.coding-tv .stage .vload { top: 0; right: 0; bottom: 0; left: 0; padding: 32px; text-align: center; }
+html.coding-tv #vload.tv-transition-quiet { display: none !important; }
+html.coding-tv .stage .vload .tip { font-size: 24px; line-height: 1.5; max-width: 720px; }
+html.coding-tv .tv-controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; padding: 64px 36px 28px; background: linear-gradient(transparent,rgba(0,0,0,.7) 45%,rgba(0,0,0,.94)); color: #fff; }
+html.coding-tv .tv-controls[hidden] { display: none; }
+html.coding-tv .tv-timeline { margin-bottom: 20px; padding: 10px 0; }
+html.coding-tv .tv-progress { position: relative; height: 5px; border-radius: 3px; background: rgba(255,255,255,.3); }
+html.coding-tv .tv-progress-fill { position: relative; height: 100%; width: 0; border-radius: 3px; background: #ff527b; }
+html.coding-tv .tv-progress-fill:after { content: ''; position: absolute; right: -7px; top: -5px; width: 15px; height: 15px; background: #fff; border-radius: 50%; }
+html.coding-tv .tv-buttons { position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 68px; }
+html.coding-tv .tv-primary-controls { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; }
+html.coding-tv .tv-controls button { flex: none; display: flex; align-items: center; justify-content: center; color: #fff; background: transparent; border: 0; padding: 0; min-height: 60px; height: 60px; font-size: 22px; border-radius: 30px; white-space: nowrap; margin-right: 10px; }
+html.coding-tv .tv-controls .tv-icon-button { width: 60px; }
+html.coding-tv .tv-controls svg { width: 28px; height: 28px; flex: none; }
+html.coding-tv .tv-controls .tv-play { width: 68px; height: 68px; color: #151923; background: #fff; border-radius: 50%; }
+html.coding-tv .tv-play[data-paused="true"] .tv-icon-player-pause, html.coding-tv .tv-play[data-paused="false"] .tv-icon-player-play { display: none; }
+html.coding-tv .tv-controls .tv-action-button { padding: 0 18px; background: rgba(255,255,255,.1); }
+html.coding-tv .tv-action-button svg { width: 24px; height: 24px; margin-right: 10px; }
+html.coding-tv .tv-controls button:last-child { margin-right: 0; }
+html.coding-tv .tv-clock { margin-left: 16px; font-size: 20px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html.coding-tv .tv-seek-hint { margin-left: 24px; color: rgba(255,255,255,.65); font-size: 17px; white-space: nowrap; }
+html.coding-tv :focus { outline: 3px solid #ff527b !important; outline-offset: -3px; box-shadow: none; }
+html.coding-tv .btn-pink:focus, html.coding-tv .tv-controls button:focus { outline-color: #fff !important; background: #ed3f70; color: #fff; }
+html.coding-tv video:focus { outline-offset: -5px; }
+/* Paint above the clipped poster instead of an inset outline beneath its image. */
+html.coding-tv .card { position: relative; }
+html.coding-tv .card .poster img, html.coding-tv .card .playov { transition: none; }
+html.coding-tv .card:hover .poster img { transform: none; }
+html.coding-tv .card .pill { backdrop-filter: none; -webkit-backdrop-filter: none; }
+html.coding-tv .card:focus { outline: none !important; }
+html.coding-tv .card:focus:after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 5; border: 3px solid #ff527b; border-radius: 9px; pointer-events: none; }
+html.coding-tv .card:focus .playov { opacity: 1; }
+html.coding-tv body > main:not(.main) { max-width: 540px; padding: 40px; }
+html.coding-tv body > main:not(.main) h1 { font-size: 26px; }
+html.coding-tv body > main:not(.main) label, html.coding-tv body > main:not(.main) .note { font-size: 20px; }
+html.coding-tv .hmeta, html.coding-tv .hintro { font-size: 22px; }
+/* TV settings are read from across the room; override compact website typography. */
+html.coding-tv .setbox { padding: 30px 32px; margin-bottom: 24px; }
+html.coding-tv .setbox h3 { font-size: 30px; line-height: 1.4; margin-bottom: 20px; }
+html.coding-tv .setbox .kv, html.coding-tv .setbox form label { font-size: 28px; line-height: 1.5; }
+html.coding-tv .setbox .kv { padding: 16px 0; }
+html.coding-tv .setbox .note { font-size: 24px; line-height: 1.65; }
+html.coding-tv .setbox input, html.coding-tv .setbox select,
+html.coding-tv .setbox button, html.coding-tv #tv-server, html.coding-tv #tv-update, html.coding-tv #tv-password { font-size: 28px !important; min-height: 60px; }
+html.coding-tv #tv-settings-actions { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+html.coding-tv #tv-settings-actions > * { margin: 0 16px 12px 0; text-decoration: none; }
+html.coding-tv #tv-password-panel[hidden] { display: none !important; }
+html.coding-tv .setbox select { height: 60px; min-width: 180px; }
+html.coding-tv .setbox input[type="checkbox"] { width: 32px; height: 32px; min-height: 32px; flex: none; }
+html.coding-tv #site-password-form { max-width: 640px !important; }
+/* Explicit margins/heights also work on older TV WebViews without flex gap/aspect-ratio. */
+html.coding-tv .hero { gap: 0; padding: 28px; }
+html.coding-tv .hero .hposter { width: 260px; height: 372px; margin-right: 32px; }
+html.coding-tv .poster { aspect-ratio: auto; height: 0; padding-top: 142.857143%; }
+html.coding-tv .poster img { position: absolute; left: 0; top: 0; }
+html.coding-tv .hthumb { height: 123px; }
+html.coding-tv .hinfo { min-width: 0; overflow: hidden; }
+html.coding-tv .hinfo h1 { font-size: 28px; line-height: 1.5; }
+html.coding-tv .hbtns, html.coding-tv .season-list, html.coding-tv .watch-actions { gap: 0; }
+html.coding-tv .hbtns > *, html.coding-tv .season-list > *, html.coding-tv .watch-actions > * { margin-right: 12px; margin-bottom: 10px; }
+html.coding-tv .seasons h3 { font-size: 24px; }
+html.coding-tv .eps { grid-template-columns: repeat(auto-fill,minmax(100px,1fr)); }
+/* Native texture is below WebView, with the website controls above the video. */
+html.coding-tv, html.coding-tv body.watching, html.coding-tv body.watching .main,
+html.coding-tv body.watching .view, html.coding-tv .watch, html.coding-tv .stage { background: transparent; }
+html.coding-tv .stage video { opacity: 0; background: transparent; }
+html.coding-tv .tv-corner-info { display: none; position: absolute; top: 8px; right: 12px; left: 12px; z-index: 6; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+html.coding-tv.tv-fullscreen .tv-corner-info, html.coding-tv .stage:fullscreen .tv-corner-info { display: flex; }
+html.coding-tv .tv-corner-info span { color: rgba(255,255,255,.5); background: transparent; padding: 0; font-size: 18px; font-weight: 400; line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; }
+html.coding-tv .tv-corner-info span[hidden] { display: none; }
+html.coding-tv .tv-corner-time { margin-left: auto; }
+html.coding-tv.tv-fullscreen .side, html.coding-tv.tv-fullscreen .top, html.coding-tv.tv-fullscreen .epdrawer { display: none !important; }
+html.coding-tv.tv-fullscreen .main { margin-left: 0; }
+html.coding-tv.tv-fullscreen .view { padding: 0; }
+html.coding-tv.tv-fullscreen .stage { width: 100%; }
+html.coding-tv.tv-fullscreen.tv-episodes-open .watch .epdrawer {
+  display: flex !important; position: fixed; right: 0; top: 0; bottom: 0; z-index: 8;
+  min-height: 0; box-shadow: -24px 0 64px rgba(0,0,0,.5);
+}
+html.coding-tv.tv-fullscreen.tv-episodes-open .epdrawer .watch-heading,
+html.coding-tv.tv-fullscreen.tv-episodes-open .epdrawer .watch-actions { display: none; }
+html.coding-tv.tv-fullscreen.tv-episodes-open .epdrawer .dlist { min-height: 0; padding: 12px; }
+@media (min-width:2200px) { html.coding-tv .grid { grid-template-columns: repeat(10,minmax(0,1fr)); } html.coding-tv .watch .epdrawer {width:440px;} }
+@media (max-width:1600px) { html.coding-tv .grid { grid-template-columns: repeat(6,minmax(0,1fr)); } html.coding-tv .top {gap:12px;} html.coding-tv .watch .epdrawer {width:320px;} }
+
+@media (max-width:1600px) { html.coding-tv .tv-controls { padding: 48px 24px 14px; } html.coding-tv .tv-timeline {padding:8px 0;margin-bottom:10px;} html.coding-tv .tv-buttons {min-height:60px;} html.coding-tv .tv-controls button { font-size: 20px; min-height: 52px; height: 52px; margin-right: 6px; } html.coding-tv .tv-controls .tv-icon-button {width:52px;} html.coding-tv .tv-controls .tv-play {width:60px;height:60px;} html.coding-tv .tv-clock {font-size:18px;margin-left:12px;} html.coding-tv .tv-seek-hint {display:none;} }
+@media (min-width:2200px) {
+  html.coding-tv .setbox h3 { font-size: 40px; }
+  html.coding-tv .setbox .kv, html.coding-tv .setbox form label { font-size: 36px; }
+  html.coding-tv .setbox .note { font-size: 32px; }
+  html.coding-tv .setbox input, html.coding-tv .setbox select,
+  html.coding-tv .setbox button, html.coding-tv #tv-server, html.coding-tv #tv-update, html.coding-tv #tv-password { font-size: 36px !important; min-height: 76px; }
+  html.coding-tv .setbox select { height: 76px; }
+  html.coding-tv .setbox input[type="checkbox"] { width: 40px; height: 40px; min-height: 40px; }
+  html.coding-tv .tv-controls { padding: 96px 48px 40px; }
+  html.coding-tv .tv-timeline { padding: 14px 0; margin-bottom: 28px; }
+  html.coding-tv .tv-buttons { min-height: 112px; }
+  html.coding-tv .tv-progress { height: 8px; }
+  html.coding-tv .tv-progress-fill:after { width: 22px; height: 22px; right: -11px; top: -7px; }
+  html.coding-tv #vload.tv-transition-quiet { display: none !important; }
+html.coding-tv .stage .vload .tip { font-size: 34px; max-width: 1100px; }
+  html.coding-tv .tv-controls button { min-height: 96px; height: 96px; font-size: 32px; border-radius: 48px; margin-right: 16px; }
+  html.coding-tv .tv-controls .tv-icon-button { width: 96px; }
+  html.coding-tv .tv-controls .tv-play { width: 112px; height: 112px; }
+  html.coding-tv .tv-controls svg { width: 40px; height: 40px; }
+  html.coding-tv .tv-controls .tv-action-button { padding: 0 28px; }
+  html.coding-tv .tv-action-button svg { width: 34px; height: 34px; margin-right: 14px; }
+  html.coding-tv .tv-clock { margin-left: 24px; font-size: 30px; }
+  html.coding-tv .tv-seek-hint { margin-left: 36px; font-size: 26px; }
+}
+
+html.coding-tv .tv-decoder-options { display: flex; margin: 16px 0; }
+html.coding-tv .tv-decoder-options button { flex: none; margin-right: 16px; padding: 12px 22px; white-space: nowrap; }
+html.coding-tv .tv-decoder-options button[aria-pressed="true"] { color: var(--pink); background: var(--pink-soft); border-color: var(--pink-border); }

@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.runtime-source/
+.venv/
+android-tv/build/
+nas/run/
+nas/data/
+nas/private/config.json
+nas/private/*.json
+nas/**/*.pem
+nas/**/*.key
+nas/**/*.crt
+nas/**/*.db
+nas/**/*.sqlite*
+**/__pycache__/
+**/*.pyc

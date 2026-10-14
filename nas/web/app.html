@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>coding伴侣</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%20fill%3D%22none%22%3E%0A%20%20%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2260%22%20height%3D%2260%22%20rx%3D%2218%22%20fill%3D%22%23ff2e5f%22%2F%3E%0A%20%20%3Crect%20x%3D%2210%22%20y%3D%2213%22%20width%3D%2244%22%20height%3D%2238%22%20rx%3D%229%22%20fill%3D%22%231b1e26%22%2F%3E%0A%20%20%3Cg%20fill%3D%22%23aeb7c8%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2217%22%20cy%3D%2220%22%20r%3D%221.5%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2222%22%20cy%3D%2220%22%20r%3D%221.5%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2227%22%20cy%3D%2220%22%20r%3D%221.5%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cpath%20d%3D%22m23%2029-6%206%206%206m18-12%206%206-6%206%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M29%2029.5v11l8-5.5-8-5.5Z%22%20fill%3D%22%23ff527b%22%20stroke%3D%22%23ff527b%22%20stroke-width%3D%221.5%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%3C%2Fsvg%3E">
+<script>
+(() => {
+  const system = window.matchMedia('(prefers-color-scheme: dark)');
+  const modes = ['system', 'light', 'dark'];
+  let mode = 'system';
+  try {
+    const saved = localStorage.getItem('hg_theme');
+    if (modes.includes(saved)) mode = saved;
+  } catch (_) {}
+  function apply() {
+    const resolved = mode === 'system' ? (system.matches ? 'dark' : 'light') : mode;
+    if (document.documentElement.dataset.theme !== resolved) document.documentElement.dataset.theme = resolved;
+  }
+  window.hgTheme = {
+    mode: () => mode,
+    set(value) {
+      if (!modes.includes(value)) return;
+      if (mode === value) return;
+      mode = value;
+      try { localStorage.setItem('hg_theme', mode); } catch (_) {}
+      apply();
+    },
+  };
+  const changed = () => { if (mode === 'system') apply(); };
+  if (system.addEventListener) system.addEventListener('change', changed);
+  else system.addListener(changed);
+  apply();
+})();
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --pink: #ff2e5f;
+    --pink-soft: #ffe9f0;
+    --pink-border: #ffc9d8;
+    --bg: #f5f6f8;
+    --line: #eceef1;
+    --txt: #1f2129;
+    --txt2: #6b7080;
+    --surface: #fff;
+    --control: #f6f7f9;
+    --search-bg: #f2f3f5;
+    --txt-control: #333;
+    --nav-txt: #5a5f6e;
+    --muted: #9298a5;
+    --intro: #4c5162;
+    --scroll: #d6d8de;
+    --skeleton-start: #e8e9ee;
+    --skeleton-end: #d9dbe2;
+    --seen: #a7acb9;
+    --separator: #d8dae0;
+    --track: #eef0f3;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --pink: #ff527b;
+    --pink-soft: #39202b;
+    --pink-border: #773248;
+    --bg: #111318;
+    --surface: #1b1e26;
+    --control: #272b35;
+    --search-bg: #272b35;
+    --line: #323744;
+    --txt: #edf0f5;
+    --txt2: #afb7c8;
+    --txt-control: #e1e6ef;
+    --nav-txt: #b3bccd;
+    --muted: #a4aec0;
+    --intro: #bdc5d4;
+    --scroll: #4e5668;
+    --skeleton-start: #303644;
+    --skeleton-end: #242a36;
+    --seen: #97a2b7;
+    --separator: #566075;
+    --track: #323744;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--bg); color: var(--txt); font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
+
+  /* ===== 侧边栏 ===== */
+  .side {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 72px; z-index: 20;
+    background: var(--surface); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; padding: 16px 0 18px;
+  }
+  .logo {
+    width: 36px; height: 36px; border-radius: 11px; margin-bottom: 22px;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .logo svg { width: 36px; height: 36px; display: block; }
+  .nav {
+    width: 100%; padding: 11px 0; display: flex; flex-direction: column;
+    align-items: center; gap: 4px; color: var(--nav-txt); cursor: pointer; font-size: 11px;
+    user-select: none;
+  }
+  .nav svg { width: 22px; height: 22px; }
+  .nav.on { color: var(--pink); font-weight: 600; }
+  .nav:hover { color: var(--pink); }
+  .side .spacer { flex: 1; }
+
+  /* ===== 主区 ===== */
+  .main { margin-left: 72px; min-height: 100vh; display: flex; flex-direction: column; }
+  .top {
+    position: sticky; top: 0; z-index: 10; background: var(--surface);
+    display: flex; align-items: center; gap: 26px; height: 60px; padding: 0 26px;
+  }
+  .brand { font-size: 19px; font-weight: 800; color: var(--pink); letter-spacing: .5px; white-space: nowrap; }
+  .gtabs { display: flex; gap: 24px; }
+  .gtab { font-size: 15px; color: var(--txt-control); padding: 19px 2px 17px; cursor: pointer; border-bottom: 2.5px solid transparent; }
+  .gtab.on { color: var(--pink); font-weight: 700; border-color: var(--pink); }
+  .searchbox {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    background: var(--search-bg); border-radius: 10px; padding: 8px 14px; width: 300px;
+  }
+  .searchbox input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--txt); }
+  .searchbox svg { width: 17px; height: 17px; color: #8a8f9c; cursor: pointer; }
+  .theme-buttons {
+    display: flex; flex: none; gap: 3px; padding: 3px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--control);
+  }
+  .theme-buttons button {
+    min-height: 30px; padding: 5px 10px; border: 1px solid transparent; border-radius: 7px;
+    background: transparent; color: var(--txt2); font: inherit; font-size: 12px;
+    white-space: nowrap; cursor: pointer;
+  }
+  .theme-buttons button:hover { color: var(--pink); }
+  .theme-buttons button[aria-pressed="true"] { color: var(--pink); background: var(--pink-soft); border-color: var(--pink-border); font-weight: 600; }
+  .theme-buttons button:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+  .searchbox { min-width: 140px; width: clamp(140px, 24vw, 300px); }
+  .searchbox input { min-width: 0; }
+  .gtabs:empty { display: none; }
+  @media (max-width: 900px) {
+    .top { gap: 12px; padding: 0 16px; }
+    .gtabs { gap: 14px; }
+  }
+  @media (max-width: 640px) {
+    .top { flex-wrap: wrap; height: auto; min-height: 60px; padding: 10px 12px; gap: 8px 12px; }
+    .brand { order: 1; }
+    .theme-buttons { order: 2; margin-left: auto; }
+    .searchbox { order: 3; width: 100%; margin-left: 0; }
+    .gtabs { order: 4; width: 100%; }
+    .gtab { padding: 8px 2px; }
+  }
+
+  .view { flex: 1; padding: 18px 26px 70px; max-width: 1460px; width: 100%; margin: 0 auto; }
+
+  /* ===== 通用组件 ===== */
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 22px; }
+  .chip {
+    padding: 5px 15px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+    font-size: 13px; color: var(--txt-control); cursor: pointer; transition: .12s;
+  }
+  .chip:hover { border-color: var(--pink-border); color: var(--pink); }
+  .chip.on { background: var(--pink-soft); color: var(--pink); border-color: var(--pink-border); font-weight: 600; }
+
+  .sechead { display: flex; align-items: center; margin: 26px 0 16px; }
+  .sechead:first-child { margin-top: 2px; }
+  .sechead h2 { font-size: 20px; font-weight: 800; }
+  .sechead .sub { margin-left: 14px; display: flex; gap: 10px; }
+  .sechead .acts { margin-left: auto; display: flex; gap: 10px; }
+  .ghost {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 14px; font-size: 13px; color: var(--txt-control); cursor: pointer;
+  }
+  .ghost:hover { border-color: var(--pink-border); color: var(--pink); }
+  .pill-tab {
+    padding: 5px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    font-size: 13px; cursor: pointer; color: var(--txt-control);
+  }
+  .pill-tab.on { color: var(--pink); border-color: var(--pink); background: var(--pink-soft); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px 14px; }
+
+  .card { cursor: pointer; }
+  .poster {
+    position: relative; aspect-ratio: 7/10; border-radius: 9px; overflow: hidden;
+    background: linear-gradient(160deg, var(--skeleton-start), var(--skeleton-end));
+  }
+  .poster img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s; }
+  .card:hover .poster img { transform: scale(1.04); }
+  .rk {
+    position: absolute; top: 5px; left: 9px; font-size: 20px; font-weight: 800; font-style: italic;
+    color: #fff; text-shadow: 0 1px 5px rgba(0,0,0,.55); z-index: 2;
+  }
+  .rk.top3 { font-size: 26px; }
+  .pill {
+    position: absolute; z-index: 2; background: rgba(0,0,0,.55); color: #fff;
+    font-size: 11px; padding: 2.5px 8px; border-radius: 999px; backdrop-filter: blur(2px);
+  }
+  .pill.heat { bottom: 7px; left: 7px; }
+  .playov {
+    position: absolute; inset: 0; z-index: 3; display: grid; place-items: center;
+    background: rgba(0,0,0,.12); opacity: 0; transition: .16s;
+  }
+  .card:hover .playov { opacity: 1; }
+  .playov .cir {
+    width: 46px; height: 46px; border-radius: 50%; background: var(--pink);
+    display: grid; place-items: center; box-shadow: 0 4px 14px rgba(255,46,95,.45);
+  }
+  .crow { display: flex; align-items: flex-start; gap: 6px; margin-top: 9px; }
+  .ctitle {
+    flex: 1; font-size: 13px; font-weight: 500; line-height: 1.45; color: var(--txt);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .favbtn { border: 0; background: none; cursor: pointer; color: #b6bac4; padding: 2px; flex: none; }
+  .favbtn.on { color: var(--pink); }
+  .favbtn:hover { color: var(--pink); }
+  .cmeta { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .ceps { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .ctags { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .empty { text-align: center; padding: 90px 0; color: var(--muted); }
+  .empty .big { font-size: 44px; margin-bottom: 12px; }
+  .loadbox { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 80px 0; color: var(--txt2); }
+  .spin {
+    width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--pink);
+    border-radius: 50%; animation: rot 0.8s linear infinite;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* ===== 详情页 ===== */
+  .hero { display: flex; gap: 26px; background: var(--surface); border-radius: 14px; padding: 24px; }
+  .hero .hposter { width: 212px; flex: none; aspect-ratio: 7/10; border-radius: 10px; object-fit: cover; background: var(--skeleton-start); }
+  .hinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .hinfo h1 { font-size: 23px; font-weight: 800; }
+  .hmeta { display: flex; flex-wrap: wrap; gap: 7px 0; margin-top: 10px; font-size: 13px; color: var(--txt2); }
+  .hmeta b { color: var(--pink); font-weight: 700; }
+  .hmeta .sep { margin: 0 10px; color: var(--separator); }
+  .hintro { margin-top: 14px; font-size: 13.5px; color: var(--intro); line-height: 1.75; }
+  .intro-text.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .hintro .more { color: var(--pink); cursor: pointer; white-space: nowrap;
+    background: none; border: 0; padding: 0; margin-top: 4px; font: inherit; }
+  .seasons { margin-top: 20px; }
+  .seasons h3 { font-size: 14px; margin-bottom: 10px; }
+  .season-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .season-btn { background: var(--control); border: 1px solid transparent; border-radius: 9px;
+    padding: 9px 14px; font-size: 13px; color: var(--txt); cursor: pointer; }
+  .season-btn:hover { border-color: var(--pink-border); }
+  .season-btn.on { background: var(--pink-soft); color: var(--pink); border-color: var(--pink-border); font-weight: 600; }
+  .season-note { color: var(--txt2); font-size: 12px; line-height: 1.7; }
+  .season-retry { background: none; border: 0; color: var(--pink); cursor: pointer; padding: 0 6px; font-size: 12px; }
+  .hbtns { margin-top: auto; padding-top: 18px; display: flex; gap: 12px; }
+  .btn-pink {
+    display: inline-flex; align-items: center; gap: 7px; background: var(--pink); color: #fff;
+    border: 0; border-radius: 10px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .btn-pink:hover { filter: brightness(1.06); }
+  .btn-line {
+    display: inline-flex; align-items: center; gap: 7px; background: var(--surface); color: var(--txt-control);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 18px; font-size: 14px; cursor: pointer;
+  }
+  .btn-line.on { color: var(--pink); border-color: var(--pink-border); background: var(--pink-soft); }
+
+  .epswrap { background: var(--surface); border-radius: 14px; padding: 20px 24px 24px; margin-top: 16px; }
+  .epswrap h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+  .eps { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+  .ep {
+    height: 38px; border-radius: 9px; background: var(--control); border: 1px solid transparent;
+    display: grid; place-items: center; font-size: 13px; cursor: pointer; color: var(--txt-control);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px;
+  }
+  .ep:hover { border-color: var(--pink-border); color: var(--pink); }
+  .ep.seen { color: var(--seen); }
+  .ep.cur { background: var(--pink-soft); color: var(--pink); border-color: var(--pink-border); font-weight: 700; }
+
+  /* ===== 播放页 ===== */
+  body.watching { overflow: hidden; }
+  body.watching .main { height: 100vh; height: 100dvh; min-height: 0; }
+  body.watching .top { flex-shrink: 0; gap: clamp(8px, 1.2vw, 18px); }
+  body.watching .view { padding: 0; max-width: none; min-height: 0; overflow: hidden; }
+  .watch { display: flex; height: 100%; background: #000; }
+  .stage { flex: 1; position: relative; display: flex; min-width: 0; min-height: 0; }
+  .stage video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .watch-toggle { display: none; white-space: nowrap; }
+  body.watching .watch-toggle { display: inline-block; }
+  .watch-back { display: none; flex: none; align-items: center; gap: 5px; min-height: 36px; text-decoration: none; white-space: nowrap; }
+  body.watching .watch-back { display: inline-flex; }
+  .watch-episode { display: none; flex: 1; min-width: 0; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+  body.watching .brand { display: none; }
+  body.watching .watch-episode { display: flex; }
+  .watch-series { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--txt); }
+  .watch-position { flex: none; white-space: nowrap; color: var(--pink); }
+  .vload {
+    position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.5); z-index: 6;
+  }
+  .vload .tip { font-size: 13px; color: #d8dae0; }
+  .watch-heading { display: flex; align-items: center; gap: 10px; padding: 12px 16px 4px; }
+  .watch-heading .back { flex: none; padding: 4px; background: none; border: 0; color: var(--txt); cursor: pointer; }
+  .watch-heading .wt { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .watch-actions { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
+  .watch-actions button { padding: 7px 10px; font-size: 12px; }
+  .autoc { color: var(--txt); background: var(--control); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .autoc.on { color: var(--pink); background: var(--pink-soft); border-color: var(--pink-border); }
+  @media (max-width: 640px) {
+    .watch-episode { order: 1; flex: 1 1 100%; }
+    .watch-toggle { order: 2; }
+    .watch .epdrawer { width: 220px; max-width: 55%; }
+    .watch-actions { flex-wrap: wrap; }
+  }
+  .epdrawer {
+    width: 292px; flex: none; background: var(--surface); display: flex; flex-direction: column;
+    border-left: 1px solid var(--line);
+  }
+  .epdrawer.hidden { display: none; }
+  .epdrawer .dh { padding: 14px 16px 10px; font-size: 14px; font-weight: 700; border-bottom: 1px solid var(--line); }
+  .epdrawer .dlist { flex: 1; overflow-y: auto; padding: 8px; }
+  .ditem { display: flex; gap: 8px; padding: 8px; border-radius: 9px; cursor: pointer; align-items: center; }
+  .ditem:hover { background: var(--control); }
+  .ditem.cur { background: var(--pink-soft); }
+  .ditem .no { min-width: 64px; white-space: nowrap; color: var(--muted); font-size: 13px; flex: none; }
+  .ditem.cur .no { color: var(--pink); font-weight: 700; }
+  .ditem .dt { flex: 1; font-size: 12.5px; color: var(--muted); text-align: right; white-space: nowrap; }
+  /* ===== 历史/收藏列表 ===== */
+  .hrow {
+    display: flex; gap: 14px; background: var(--surface); border-radius: 12px; padding: 12px; margin-bottom: 12px;
+    align-items: center; cursor: pointer;
+  }
+  .hrow:hover { box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .hthumb { width: 86px; aspect-ratio: 7/10; border-radius: 8px; object-fit: cover; flex: none; background: var(--skeleton-start); }
+  .hinfo2 { flex: 1; min-width: 0; }
+  .hinfo2 .t { font-size: 15px; font-weight: 600; }
+  .hinfo2 .m { font-size: 12.5px; color: var(--txt2); margin-top: 5px; }
+  .hbar { margin-top: 9px; height: 4px; background: var(--track); border-radius: 2px; max-width: 320px; }
+  .hbar i { display: block; height: 100%; background: var(--pink); border-radius: 2px; }
+  .hacts { display: flex; gap: 8px; flex: none; }
+
+  /* ===== 设置 ===== */
+  html.coding-tv .settings-password-action { display: none; }
+  .setbox { background: var(--surface); border-radius: 14px; padding: 22px 26px; margin-bottom: 16px; }
+  .setbox h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  .kv { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13.5px; }
+  .kv .k { color: var(--txt2); }
+  .setbox .kv { align-items: center; gap: 12px; flex-wrap: wrap; }
+  .setbox select {
+    min-width: 140px; max-width: 100%; height: 40px; padding: 0 12px;
+    font: inherit; font-size: 14px; color: var(--txt); background: var(--control);
+    border: 1px solid var(--line); border-radius: 9px; cursor: pointer;
+  }
+  .setbox #cache-mode { width: 300px; }
+  .setbox select:disabled { opacity: .55; cursor: default; }
+  .setbox input[type="checkbox"] { width: 22px; height: 22px; margin: 0; accent-color: var(--pink); cursor: pointer; }
+  .oktag { color: #0aa870; font-weight: 600; }
+  .note { font-size: 12.5px; color: var(--muted); line-height: 1.8; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%) translateY(20px);
+    background: rgba(25,27,34,.92); color: #fff; padding: 10px 22px; border-radius: 10px;
+    font-size: 13.5px; opacity: 0; transition: .25s; z-index: 99; pointer-events: none; max-width: 70vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .search-submit { border: 0; background: transparent; padding: 0; display: grid; place-items: center; cursor: pointer; }
+  .card, .ctitle, .cmeta { min-width: 0; }
+  @media (min-width: 768px) and (max-width: 1100px) {
+    body:not(.watching) .top { height: auto; min-height: 60px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+    body:not(.watching) .gtabs { order: 4; width: 100%; }
+    body:not(.watching) .gtab { padding: 8px 2px; }
+    body.watching .searchbox { display: none; }
+  }
+  /* 手机使用底部导航，播放与选集上下排列。 */
+  @media (max-width: 767px) {
+    :root { --mobile-nav: calc(62px + env(safe-area-inset-bottom, 0px)); }
+    body { -webkit-text-size-adjust: 100%; }
+    .side { top: auto; right: 0; bottom: 0; width: auto; height: var(--mobile-nav); flex-direction: row;
+      padding: 4px max(6px, env(safe-area-inset-right, 0px)) max(4px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+      border-right: 0; border-top: 1px solid var(--line); }
+    .side .logo, .side .spacer { display: none; }
+    .nav { flex: 1; min-width: 0; height: 54px; padding: 6px 0; gap: 3px; font-size: 11px; }
+    .nav svg { width: 23px; height: 23px; }
+    .main { margin-left: 0; min-width: 0; padding-bottom: var(--mobile-nav); }
+    .top { height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px;
+      padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); }
+    .brand { order: 1; font-size: 18px; letter-spacing: 0; }
+    .theme-buttons { order: 2; margin-left: auto; gap: 0; padding: 2px; }
+    .theme-buttons button { min-height: 40px; padding: 5px 7px; font-size: 12px; }
+    .searchbox { order: 3; width: 100%; margin-left: 0; padding: 0 8px 0 12px; height: 44px; }
+    .searchbox input { font-size: 16px; }
+    .search-submit { width: 44px; height: 44px; flex: none; }
+    .searchbox svg { width: 20px; height: 20px; }
+    .gtabs { order: 4; width: 100%; gap: 20px; }
+    .gtab { min-height: 44px; display: flex; align-items: center; padding: 8px 2px; }
+    .view { padding: 16px max(12px, env(safe-area-inset-right, 0px)) 24px max(12px, env(safe-area-inset-left, 0px)); min-width: 0; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
+    .crow { margin-top: 6px; gap: 2px; }
+    .ctitle { font-size: 14px; padding-top: 8px; }
+    .favbtn { width: 36px; min-height: 44px; display: grid; place-items: center; }
+    .cmeta { flex-wrap: wrap; gap: 3px 8px; margin-top: 0; }
+    .ctags { flex-basis: 100%; }
+    .chips { flex-wrap: nowrap; overflow-x: auto; gap: 8px; margin-bottom: 16px; padding-bottom: 4px; }
+    .chip { flex: none; min-height: 44px; padding: 10px 14px; }
+    .ghost, .pill-tab, .btn-line, .btn-pink, .autoc { min-height: 44px; }
+    .btn-line, .btn-pink { justify-content: center; }
+    .sechead { flex-wrap: wrap; gap: 8px; margin: 20px 0 12px; }
+    .sechead h2 { font-size: 20px; }
+    .sechead .sub { margin-left: 0; }
+    .sechead .acts { gap: 6px; }
+    .hero { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 14px; padding: 16px; }
+    .hero .hposter { width: 100px; grid-column: 1; grid-row: 1; }
+    .hinfo { display: contents; }
+    .hero-heading { grid-column: 2; min-width: 0; }
+    .hinfo h1 { font-size: 19px; line-height: 1.45; overflow-wrap: anywhere; }
+    .hmeta { font-size: 12px; margin-top: 8px; gap: 5px; line-height: 1.5; }
+    .hmeta .sep { margin: 0 1px; }
+    .hintro, .seasons, .hbtns { grid-column: 1 / -1; margin: 0; }
+    .hintro { font-size: 14px; }
+    html:not(.coding-tv) .hintro .more, html:not(.coding-tv) .season-retry { min-height: 44px; padding: 8px 4px; vertical-align: middle; }
+    html:not(.coding-tv) .season-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 8px; }
+    html:not(.coding-tv) .season-btn { min-width: 0; min-height: 44px; padding: 9px 2px; font-size: 12px; }
+    html:not(.coding-tv) .hbtns, html:not(.coding-tv) .hbtns > .watch-hide-actions { padding-top: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+    html:not(.coding-tv) .hbtns > .btn-pink:first-child, html:not(.coding-tv) #favbig:nth-child(2), html:not(.coding-tv) .hbtns > .watch-hide-actions { grid-column: 1 / -1; }
+    html:not(.coding-tv) .hbtns button { width: 100%; min-height: 44px; padding: 10px 8px; line-height: 1.4; }
+    .epswrap { padding: 16px; }
+    .eps { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+    .ep { height: 44px; }
+    .hrow { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 12px; }
+    .hthumb { width: 68px; }
+    .hacts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hacts button { padding: 8px; }
+    .hinfo2 .t { line-height: 1.5; overflow-wrap: anywhere; }
+    .setbox { padding: 18px 16px; }
+    .setbox .kv { gap: 8px; padding: 10px 0; }
+    .setbox .kv > label.k { width: 100%; }
+    .setbox select, .setbox #cache-mode { width: 100%; min-width: 0; height: 48px; font-size: 16px; }
+    .setbox .kv > label:not(.k) { flex: 1; line-height: 1.6; }
+    .setbox input[type="checkbox"] { flex: none; width: 28px; height: 28px; }
+    .setbox .note { font-size: 13px; overflow-wrap: anywhere; }
+    .setbox .btn-pink, .setbox .btn-line, .setbox .ghost { width: 100%; }
+    #toast { bottom: calc(var(--mobile-nav) + 12px); max-width: calc(100vw - 32px); width: max-content; }
+    body.watching .top { gap: 8px; }
+    body.watching .searchbox, body.watching .theme-buttons { display: none; }
+    body.watching .watch-back { order: 1; min-height: 44px; padding: 6px 10px; }
+    body.watching .watch-toggle { order: 2; margin-left: auto; }
+    body.watching .watch-episode { order: 3; flex: 1 1 100%; flex-wrap: wrap; gap: 4px 8px; font-size: 14px; padding-bottom: 2px; }
+    .watch-series { flex: 1 1 100%; }
+    .watch-position { font-size: 12px; }
+    .watch { flex-direction: column; min-height: 0; }
+    .stage { flex: 0 0 auto; min-height: 180px; max-height: 55vh; max-height: 55dvh; }
+    .stage video { height: auto; max-height: 55vh; max-height: 55dvh; min-height: 180px; }
+    .watch .epdrawer { width: 100%; max-width: none; flex: 1; min-height: 0; border-left: 0; border-top: 1px solid var(--line); }
+    .watch-heading { display: none; }
+    .watch-actions { flex-wrap: nowrap; gap: 8px; padding: 10px 12px; }
+    .watch-actions button { flex: 1; padding: 8px 4px; font-size: 13px; }
+    .epdrawer .dh { padding: 4px 12px 6px; }
+    #cache-progress { padding: 0 12px 6px !important; font-size: 12px; }
+    .epdrawer .dlist { padding: 4px 8px; overscroll-behavior: contain; }
+    .ditem { min-height: 48px; padding: 10px; }
+    .ditem .no, .ditem .dt { font-size: 14px; }
+    .watch.drawer-hidden .stage { flex: 1; max-height: none; }
+    .watch.drawer-hidden video { height: 100%; max-height: none; }
+  }
+  @media (max-width: 360px) {
+    .brand { font-size: 16px; }
+    .theme-buttons button { padding: 5px; font-size: 11px; }
+    .grid { gap: 16px 10px; }
+    .hero { grid-template-columns: 84px minmax(0, 1fr); padding: 12px; gap: 12px; }
+    .hero .hposter { width: 84px; }
+    .hinfo h1 { font-size: 17px; }
+    .favbtn { width: 30px; }
+  }
+  @media (max-width: 1024px) and (max-height: 500px) {
+    body.watching .side { display: none; }
+    body.watching .main { margin-left: 0; padding-bottom: 0; }
+    body.watching .top { height: auto; min-height: 48px; padding: 4px max(12px, env(safe-area-inset-right, 0px)) 4px max(12px, env(safe-area-inset-left, 0px)); flex-wrap: nowrap; }
+    body.watching .searchbox, body.watching .theme-buttons { display: none; }
+    body.watching .watch-episode { order: 2; flex: 1; flex-wrap: nowrap; }
+    body.watching .watch-toggle { order: 3; }
+    .watch-series { flex: 1; }
+    .watch { flex-direction: row; }
+    .watch .stage { flex: 1; min-height: 0; max-height: none; }
+    .watch .stage video { height: 100%; min-height: 0; max-height: none; }
+    .watch .epdrawer { flex: none; width: 240px; max-width: 40%; min-height: 0; }
+    .watch-heading { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="side">
+  <div class="logo" onclick="go('#/discover')" title="coding伴侣" role="button" tabindex="0" aria-label="coding伴侣，返回发现" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('#/discover')}">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="#ff2e5f"/>
+  <rect x="10" y="13" width="44" height="38" rx="9" fill="#1b1e26"/>
+  <g fill="#aeb7c8">
+    <circle cx="17" cy="20" r="1.5"/>
+    <circle cx="22" cy="20" r="1.5"/>
+    <circle cx="27" cy="20" r="1.5"/>
+  </g>
+  <path d="m23 29-6 6 6 6m18-12 6 6-6 6" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M29 29.5v11l8-5.5-8-5.5Z" fill="#ff527b" stroke="#ff527b" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>
+  </div>
+  <div class="nav" data-nav="discover" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('#/discover')}" onclick="go('#/discover')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.2 5.3 5.8.5-4.4 3.8 1.3 5.7L12 15.3 7.1 18.3l1.3-5.7L4 8.8l5.8-.5z"/></svg>
+    发现
+  </div>
+  <div class="nav" data-nav="rank" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('#/rank')}" onclick="go('#/rank')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M7 5H4.5a0 0 0 000 0c0 3 1.5 4.5 3 4.5M17 5h2.5c0 3-1.5 4.5-3 4.5M12 13v4M9 20h6M10 17h4"/></svg>
+    排行榜
+  </div>
+  <div class="nav" data-nav="fav" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('#/fav')}" onclick="go('#/fav')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.2L6 21V4z"/></svg>
+    收藏
+  </div>
+  <div class="nav" data-nav="history" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('#/history')}" onclick="go('#/history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 2"/></svg>
+    历史
+  </div>
+  <div class="spacer"></div>
+  <div class="nav" data-nav="settings" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('#/settings')}" onclick="go('#/settings')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 00-.14-1.4l2-1.55-2-3.46-2.35.95a7 7 0 00-2.42-1.4L13.73 2h-3.46l-.36 2.54a7 7 0 00-2.42 1.4l-2.35-.95-2 3.46 2 1.55A7 7 0 005 12c0 .48.05.94.14 1.4l-2 1.55 2 3.46 2.35-.95a7 7 0 002.42 1.4l.36 2.54h3.46l.36-2.54a7 7 0 002.42-1.4l2.35.95 2-3.46-2-1.55c.09-.46.14-.92.14-1.4z"/></svg>
+    设置
+  </div>
+</aside>
+
+<main class="main">
+  <header class="top">
+    <a class="ghost watch-back" id="watch-back" href="#/discover" aria-label="返回当前剧集详情，选择其他季">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      返回剧集
+    </a>
+    <div class="brand" onclick="go('#/discover')">coding伴侣</div>
+    <div class="watch-episode" id="watch-episode" role="status" aria-label="当前播放剧集与集数"><span class="watch-series" id="watch-series"></span><span class="watch-position" id="watch-position"></span></div>
+    <div class="gtabs" id="gtabs"></div>
+    <div class="searchbox">
+      <input id="q" placeholder="搜索短剧或演员" onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="search-submit" type="button" aria-label="搜索" onclick="doSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></button>
+    </div>
+    <div class="theme-buttons" role="group" aria-label="页面主题">
+      <button type="button" data-theme-mode="light" aria-pressed="false">白天</button>
+      <button type="button" data-theme-mode="dark" aria-pressed="false">夜晚</button>
+      <button type="button" data-theme-mode="system" aria-pressed="false">跟随系统</button>
+    </div>
+    <button class="ghost watch-toggle" id="watch-toggle" aria-controls="drawer" aria-expanded="true" onclick="W.toggleDrawer()">收起选集</button>
+  </header>
+  <div class="view" id="view"></div>
+</main>
+
+<div id="toast"></div>
+
+<link rel="stylesheet" href="/ui/assets/library.css?v=2">
+<link rel="stylesheet" href="/ui/assets/watch-ui.css?v=1"><script src="/ui/assets/profiles.js?v=1"></script><script src="/ui/assets/watch-state.js?v=2"></script><script src="/ui/assets/watch-ui.js?v=2"></script>
+<script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/library.js?v=8"></script>
+<script src="/ui/assets/device-media.js?v=direct-1"></script>
+<script src="/ui/assets/seasons.js?v=1"></script><script src="/ui/assets/settings.js?v=3"></script><script src="/ui/assets/page-requests.js?v=1"></script>
+<script src="/ui/assets/search.js?v=1"></script><script src="/ui/assets/playback-status.js?v=2"></script>
+<script>
+'use strict';
+/* ================= 基础 ================= */
+const $ = s => document.querySelector(s);
+const themeButtons = document.querySelectorAll('[data-theme-mode]');
+function syncThemeButtons() {
+  themeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.themeMode === window.hgTheme.mode())));
+}
+themeButtons.forEach(button => button.addEventListener('click', () => {
+  window.hgTheme.set(button.dataset.themeMode);
+  syncThemeButtons();
+}));
+syncThemeButtons();
+const GENRES = [
+  { id: 'short_play', name: '真人剧' },
+  { id: 'comic_series', name: '漫剧' },
+  { id: 'ai_series', name: 'AI剧' },
+];
+const PINK = '#ff2e5f';
+let curGenre = localStorage.getItem('hg_genre') || 'comic_series';
+function originalCover(value) {
+  let cover = String(value || '');
+  for (let i = 0; i < 8; i++) {
+    try {
+      const url = new URL(cover, location.origin);
+      if (url.origin !== location.origin || url.pathname !== '/img') break;
+      const next = url.searchParams.get('url');
+      if (!next || next === cover) break;
+      cover = next;
+    } catch (_) { break; }
+  }
+  return cover;
+}
+const imgx = (u, width = 320) => '/img?w=' + width + '&url=' + encodeURIComponent(originalCover(u));
+const fmtW = n => !n ? '' : n >= 1e8 ? (n / 1e8).toFixed(1) + '亿' : n >= 1e4 ? Math.round(n / 1e4) + '万' : String(n);
+const fmtT = s => { s = Math.max(0, Math.floor(s||0)); const m = Math.floor(s/60); return m + ':' + String(s%60).padStart(2,'0'); };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// category 字段不同接口类型不一: browse 是 "a / b / c" 字符串, episodes 是数组 → 统一转"·"分隔展示
+const catStr = v => typeof v === 'string' ? v : Array.isArray(v) ? v.filter(x => typeof x === 'string').join('/') : '';
+const catDots = (v, n=3) => catStr(v).split('/').map(s => s.trim()).filter(Boolean).slice(0, n).join(' · ');
+
+let siteLoginPending = false;
+function requireSiteLogin() {
+  if (siteLoginPending) return;
+  siteLoginPending = true;
+  W.stop?.();
+  location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search + location.hash));
+}
+const siteFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const response = await siteFetch(...args);
+  const requestURL = args[0] instanceof Request ? args[0].url : String(args[0]);
+  if (response.status === 401 && new URL(requestURL, location.href).origin === location.origin) requireSiteLogin();
+  return response;
+};
+window.addEventListener('pageshow', event => {
+  if (event.persisted) fetch('/playback/settings', {cache:'no-store'}).catch(() => {});
+});
+
+async function api(path, {revalidate = false, signal, headers} = {}) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 30000), cancel = () => ctl.abort(); if (signal) { signal.addEventListener('abort', cancel, {once:true}); if (signal.aborted) cancel(); }
+  try {
+    const r = await fetch(path, { signal: ctl.signal, headers, cache: revalidate ? 'no-cache' : 'default' });
+    if (!r.ok) { let d = ''; try { d = (await r.json()).detail || ''; } catch(e){} const error = new Error(d || ('HTTP ' + r.status)); error.status = r.status; throw error; }
+    const data = await r.json();
+    if (data && typeof data === 'object') Object.defineProperty(data, '_nasStale', {value: r.headers.get('X-NAS-Cache') === 'STALE'});
+    return data;
+  } finally { clearTimeout(t); if (signal) signal.removeEventListener('abort', cancel); }
+}
+// 全局兜底: 未捕获的异步错误显示在页面上(避免静默卡在加载态)
+window.addEventListener('unhandledrejection', ev => {
+  const e = ev.reason || {};
+  const el = $('#view');
+  if (el) el.innerHTML = `<div class="empty"><div class="big">⚠️</div>${esc(e.message || String(e))}
+    <br><br><button class="ghost" onclick="location.reload()">重新加载</button></div>`;
+});
+function toast(msg, ms=2200) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms);
+}
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+function doSearch() {
+  const v = $('#q').value.trim();
+  if (v) go('#/search/' + encodeURIComponent(v));
+}
+
+/* ================= 收藏 / 历史 ================= */
+const {favs, hist} = CodingWatchState;
+CodingWatchState.start();
+const cache = { filters: {}, eps: {} };
+
+/* ================= 卡片 ================= */
+function cardHTML(it, opt = {}) {
+  const cat = catDots(it.category);
+  const isFav = favs.has(it.series_id);
+  const heat = it.hot || (it.play_cnt ? fmtW(it.play_cnt) + '热度' : '');
+  return `
+  <div class="card" data-sid="${it.series_id}" onclick="go('#/detail/${it.series_id}')">
+    <div class="poster">${location.hash === '#/fav' ? CodingWatchUI.badge(it.series_id) : ''}
+      ${opt.rank ? `<div class="rk ${opt.rank<=3?'top3':''}">${opt.rank}</div>` : ''}
+      ${heat ? `<div class="pill heat">${esc(heat)}</div>` : ''}
+      <img loading="lazy" src="${imgx(it.cover)}" onerror="this.style.visibility='hidden'">
+      <div class="playov"><div class="cir">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13c0 .8.9 1.3 1.6.9l10.2-6.5c.6-.4.6-1.4 0-1.8L9.6 4.6c-.7-.4-1.6.1-1.6.9z"/></svg>
+      </div></div>
+    </div>
+    <div class="crow">
+      <div class="ctitle">${esc(it.title)}</div>
+      <button class="favbtn ${isFav?'on':''}" title="${isFav?'取消收藏':'收藏'}" aria-label="${isFav?'取消收藏':'收藏'}" aria-pressed="${isFav}" onclick="event.stopPropagation();toggleFav('${it.series_id}',this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="${isFav?PINK:'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.2L6 21V4z"/></svg>
+      </button>
+    </div>
+    <div class="cmeta"><div class="ctags">${esc(cat || (it.score ? '评分 ' + it.score : ''))}</div>
+      ${it.episode_cnt ? `<span class="ceps">全 ${esc(it.episode_cnt)} 集</span>` : ''}</div>
+  </div>`;
+}
+function toggleFav(sid, btn) {
+  if (location.hash === '#/fav') {
+    favs.remove(sid);
+    vFav();
+    toast('已取消收藏');
+    return;
+  }
+  const on = favs.toggle({ sid, title: btn.closest('.card').querySelector('.ctitle').textContent,
+                           cover: btn.closest('.card').querySelector('img')?.src || '', ts: 0 });
+  btn.classList.toggle('on', on);
+  btn.querySelector('svg').setAttribute('fill', on ? PINK : 'none');
+  btn.title = on ? '取消收藏' : '收藏';
+  btn.setAttribute('aria-label', btn.title);
+  btn.setAttribute('aria-pressed', String(on));
+  toast(on ? '已加入收藏' : '已取消收藏');
+}
+function gridHTML(items, opt = {}) {
+  if (!items || !items.length) return `<div class="empty"><div class="big">🎬</div>暂无内容</div>`;
+  return `<div class="grid">${items.map((it, i) => cardHTML(it, { ...opt, rank: opt.ranked ? i + 1 : null })).join('')}</div>`;
+}
+const loadingHTML = '<div class="loadbox"><div class="spin"></div>加载中…</div>';
+
+/* ================= 视图: 发现 ================= */
+let discoverVersion = 0;
+const onDiscover = () => !location.hash || ['#', '#/discover'].includes(location.hash);
+async function vDiscover() {
+  const el = $('#view');
+  renderGtabs();
+  el.innerHTML = loadingHTML;
+  const version = ++discoverVersion, genre = curGenre, ready = CodingWatchState.ready();
+  let filters = cache.filters[genre] || await CodingLibraryStore.filters(genre);
+  const refresh = api('/filters?genre=' + genre).then(data => { cache.filters[genre] = data; CodingLibraryStore.filters(genre, data); return data; }).catch(() => filters); if (!filters) filters = await refresh;
+  await ready;
+  if (version !== discoverVersion || genre !== curGenre || !onDiscover()) return;
+  cache.filters[genre] = filters;
+  CodingLibrary.mount(el, {genre, themes: (filters?.rows || []).find(r => r.type === 'category_dim_theme')?.items || [], api, cardHTML, cover: it => imgx(it.cover), esc});
+}
+
+/* ================= 视图: 排行榜 ================= */
+async function vRank() {
+  renderGtabs(true);
+  const el = $('#view');
+  el.innerHTML = `
+    <div class="chips" id="rktabs">
+      <div class="chip on" data-b="recommend">推荐榜</div>
+      <div class="chip" data-b="hot">热播榜</div>
+      <div class="chip" data-b="new">新品榜</div>
+    </div>
+    <div class="note" style="margin-bottom:14px">漫剧榜单 · 数据来自内容服务</div>
+    <div id="rkbox">${loadingHTML}</div>`;
+  $('#rktabs').addEventListener('click', e => {
+    const c = e.target.closest('.chip'); if (!c) return;
+    document.querySelectorAll('#rktabs .chip').forEach(x => x.classList.remove('on'));
+    c.classList.add('on');
+    loadRank(c.dataset.b);
+  });
+  loadRank('recommend');
+}
+async function loadRank(board) {
+  const box = $('#rkbox'), request = CodingPageRequests.start(); box.innerHTML = loadingHTML;
+  try {
+    const d = await api('/rank?board=' + board + '&limit=30', {signal:request.signal});
+    if (!request.live() || !box.isConnected) return;
+    box.innerHTML = gridHTML(d.items, { ranked: true });
+  } catch (e) { if (request.live() && box.isConnected) box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; } finally { request.done(); }
+}
+
+/* ================= 视图: 搜索 ================= */
+function vSearch(q) {
+  q = q.trim();
+  renderGtabs(true);
+  $('#q').value = q;
+  CodingSearch.mount($('#view'), q, {api, cardHTML, esc, remember: rememberSeasonSearch});
+}
+
+/* ================= 视图: 详情 ================= */
+let introObserver = null;
+function setupIntroToggle(text, button) {
+  introObserver?.disconnect();
+  let expanded = false, width = -1;
+  const render = () => {
+    text.classList.toggle('clamp', !expanded);
+    button.textContent = expanded ? '收起' : '展开';
+    button.setAttribute('aria-expanded', String(expanded));
+  };
+  const measure = () => {
+    if (width === text.clientWidth) return;
+    width = text.clientWidth;
+    text.classList.add('clamp');
+    const clipped = text.scrollHeight > text.clientHeight + 1;
+    if (!clipped) expanded = false;
+    button.hidden = !clipped;
+    render();
+  };
+  button.onclick = () => { expanded = !expanded; render(); };
+  measure();
+  if (window.ResizeObserver) {
+    introObserver = new window.ResizeObserver(measure);
+    introObserver.observe(text);
+  }
+}
+async function vDetail(sid) {
+  renderGtabs(true);
+  const el = $('#view');
+  el.innerHTML = loadingHTML;
+  let d;
+  try { d = await api('/episodes?series_id=' + sid); }
+  catch (e) { if (location.hash === '#/detail/' + sid) el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (location.hash !== '#/detail/' + sid) return;
+  cache.eps[sid] = d.episodes;
+  (cache.meta = cache.meta || {})[sid] = d.meta;
+  const m = d.meta;
+  const cat = catDots(m.category, 4);
+  const rec = hist.get(sid);
+  const isFav = favs.has(sid);
+  el.innerHTML = `
+    <div class="hero">
+      <img class="hposter" src="${imgx(m.cover, 480)}" onerror="this.style.visibility='hidden'">
+      <div class="hinfo">
+        <div class="hero-heading">
+        <h1>${esc(m.title)}</h1>
+        <div class="hmeta">
+          ${m.score ? `<span><b>${esc(m.score)}分</b></span><span class="sep">|</span>` : ''}
+          <span>全 ${m.episode_cnt} 集</span><span class="sep">|</span>
+          <span>${fmtW(m.play_cnt)}次播放</span>
+          ${m.followed_cnt ? `<span class="sep">|</span><span>${fmtW(m.followed_cnt)}收藏</span>` : ''}
+          ${m.status ? `<span class="sep">|</span><span>${esc(m.status)}</span>` : ''}
+        </div>
+        ${cat ? `<div class="hmeta" style="margin-top:8px">${esc(cat)}</div>` : ''}
+        </div>
+        <div class="hintro">
+          <div class="intro-text clamp" id="intro-text">${esc(m.intro || '')}</div>
+          <button class="more" id="intro-toggle" type="button" aria-expanded="false" aria-controls="intro-text" hidden>展开</button>
+        </div>
+        <section class="seasons" id="seasons" aria-label="全部季"></section>
+        <div class="hbtns">
+          ${rec ? `<button class="btn-pink" onclick="go('#/watch/${sid}/${rec.ep}')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13c0 .8.9 1.3 1.6.9l10.2-6.5c.6-.4.6-1.4 0-1.8L9.6 4.6c-.7-.4-1.6.1-1.6.9z"/></svg>
+            ${rec.finished ? '重新看' : '继续看'} 第${rec.ep}集${!rec.finished && rec.pos > 0 ? ' · ' + fmtT(rec.pos) : ''}</button>` : ''}
+          <button class="btn-pink" ${rec ? 'style="background:var(--surface);color:var(--txt-control);border:1px solid var(--line);font-weight:500"' : ''}
+                  onclick="go('#/watch/${sid}/1/0')">${rec ? '从头看' : '播放第1集'}</button>
+          <button class="btn-line ${isFav?'on':''}" id="favbig" onclick="toggleFavBig('${sid}')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="${isFav?PINK:'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.2L6 21V4z"/></svg>
+            ${isFav ? '已收藏' : '收藏'}</button>
+        </div>
+      </div>
+    </div>
+    <div class="epswrap">
+      <h3>选集（${d.episodes.length}）</h3>
+      <div class="eps">
+        ${d.episodes.map(e => {
+          const seen = rec && (e.index < rec.ep || (e.index === rec.ep && rec.pos > (rec.dur||1e9) * 0.9));
+          return `<div class="ep ${seen?'seen':''}" onclick="go('#/watch/${sid}/${e.index}')">${e.index}</div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  CodingWatchUI.detail(sid, m, d.episodes); setupIntroToggle($('#intro-text'), $('#intro-toggle'));
+  loadSeasons(sid, $('#seasons'));
+  window.toggleFavBig = s => {
+    const on = favs.toggle({ sid: s, title: m.title, cover: m.cover, epCnt: d.episodes.length });
+    const b = $('#favbig');
+    b.classList.toggle('on', on);
+    b.querySelector('svg').setAttribute('fill', on ? PINK : 'none');
+    b.lastChild.textContent = on ? '已收藏' : '收藏';
+    toast(on ? '已加入收藏' : '已取消收藏');
+  };
+}
+
+/* ================= 视图: 播放 ================= */
+const W = { sid: null, eps: [], meta: null, ep: 1, auto: true, speed: 1, saveT: null };
+async function vWatch(sid, ep, resumeAt) {
+  renderGtabs(true);
+  const el = $('#view');
+  el.innerHTML = loadingHTML;
+  let eps = cache.eps[sid], meta = cache.meta?.[sid];
+  if (!eps) {
+    try {
+      const d = await api('/episodes?series_id=' + sid);
+      eps = d.episodes; meta = d.meta;
+      cache.eps[sid] = eps; (cache.meta = cache.meta || {})[sid] = meta;
+    }
+    catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  }
+  if (!location.hash.startsWith("#/watch/" + sid + "/")) return;
+  W.title = (meta && meta.title) || ''; W.cover = (meta && meta.cover) || '';
+  W.sid = sid; W.eps = eps; W.ep = Math.min(Math.max(1, ep|0), eps.length);
+  W.resumeAt = resumeAt;
+  el.innerHTML = `
+  <div class="watch">
+    <div class="stage" id="stage">
+      <video id="video" controls playsinline></video>
+      <div class="vload" id="vload"><div class="spin" style="border-color:rgba(255,255,255,.3);border-top-color:${PINK}"></div>
+        <div class="tip" id="vtip">正在准备第${W.ep}集</div>
+        <button class="ghost" id="vstart" style="display:none;color:#fff" onclick="W.play()">开始播放</button>
+        <button class="ghost" id="vretry" style="display:none;color:#fff" onclick="W.load(W.ep, false, true)">重试本集</button></div>
+    </div>
+    <div class="epdrawer" id="drawer">
+      <div class="watch-heading">
+        <button class="back" onclick="go('#/detail/${sid}')" aria-label="返回剧集详情">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <div class="wt" id="wtitle"></div>
+      </div>
+      <div class="watch-actions">
+        <button class="ghost" onclick="W.step(-1)">上一集</button>
+        <button class="ghost" onclick="W.step(1)">下一集</button>
+        <button class="autoc ${W.auto?'on':''}" id="autoc" onclick="W.toggleAuto()" aria-pressed="${W.auto}">自动连播</button>
+      </div>
+      <div class="dh">选集（${eps.length}）</div><div class="note" id="cache-progress" style="padding:0 18px 12px">正在连接缓存队列…</div>
+      <div class="dlist">
+        ${eps.map(e => `<div class="ditem ${e.index===W.ep?'cur':''}" data-ep="${e.index}" onclick="W.load(${e.index})">
+          <span class="no">第${e.index}集</span><span class="dt">未缓存</span></div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+  W.bind();
+  W.load(W.ep, true);
+}
+
+W.bind = () => {
+  const v = W.video = $('#video');
+  W.mediaReady = false;
+  W.metadataReady = false;
+  W.finished = false;
+  W.play = () => { if (v.paused) v.play().catch(() => toast('播放未能开始，请重试本集')); else v.pause(); };
+  W.toggleDrawer = () => {
+    const hidden = $('#drawer').classList.toggle('hidden');
+    $('.watch').classList.toggle('drawer-hidden', hidden);
+    $('#watch-toggle').textContent = hidden ? '展开选集' : '收起选集';
+    $('#watch-toggle').setAttribute('aria-expanded', String(!hidden));
+  };
+  $('#watch-toggle').textContent = '收起选集';
+  $('#watch-toggle').setAttribute('aria-expanded', 'true');
+  W.toggleAuto = () => {
+    W.auto = !W.auto; $('#autoc').classList.toggle('on', W.auto);
+    $('#autoc').setAttribute('aria-pressed', String(W.auto));
+    toast(W.auto ? '自动连播已开启' : '自动连播已关闭', 1200);
+  };
+  W.step = d => { const n = W.ep + d; if (n >= 1 && n <= W.eps.length) W.load(n); };
+  W.client = 'viewer-' + (crypto.randomUUID?.() || Date.now() + '-' + Math.random().toString(36).slice(2));
+  W.completed = 0;
+  W.token = 0;
+  W.alive = true;
+  W.activeEp = 0;
+  W.deviceError = null; W.device = null;
+  W.mode = typeof DeviceMedia !== 'undefined' ? DeviceMedia.mode() :
+    (typeof location !== 'undefined' && !/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname) ? 'device' : 'nas');
+  let mediaRetry = 0, pollFailures = 0, pollFailureAt = 0;
+  const client = W.client, transition = window.CodingWebTransition && !window.CodingTVTransition && !v._tvNative && !document.documentElement?.classList.contains('coding-tv') ? window.CodingWebTransition.create(W, v, $('#vload')) : null;
+  const post = async (path, body) => {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 30000);
+    try {
+      const response = await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal });
+      if (!response.ok) throw new Error((await response.json()).detail || '缓存服务连接失败');
+      return await response.json();
+    } finally { clearTimeout(timer); }
+  };
+  const fail = message => {
+    if (!W.alive || W.client !== client) return;
+    transition?.show(); $('#vload').style.display = 'flex';
+    $('#vload .spin').style.display = 'none';
+    $('#vtip').textContent = message;
+    $('#vretry').style.display = '';
+    $('#vstart').style.display = 'none';
+  };
+  const update = (data, n, token) => {
+    if (!W.alive || W.client !== client || token !== W.token) return;
+    const status = data.current; transition?.remember(data);
+    W.statusPoll?.state(status.state);
+    $('#cache-progress').textContent = `${W.mode === 'device' ? '设备' : 'NAS'}已缓存 ${data.ready} 集 · 排队/准备 ${data.queued} 集${data.errors ? ' · 失败 ' + data.errors + ' 集' : ''}${data.warning ? ' · ' + data.warning : ''}`;
+    document.querySelectorAll('.ditem').forEach(item => {
+      const state = data.episodes[item.dataset.ep]?.state;
+      const label = state === 'ready' && W.mode === 'device' && !data.episodes[item.dataset.ep]?.cached ? '本次可播' : ({ready: '已缓存', working: '准备中', queued: '排队中', error: '准备失败'})[state] || '未缓存';
+      item.title = `第${item.dataset.ep}集 · ${label}`;
+      item.querySelector('.dt').textContent = label;
+    });
+    if (status.state === 'ready') {
+      if (W.activeEp === n) return;
+      W.activeEp = n;
+      $('#vtip').textContent = `第${n}集已准备好，正在加载画面`;
+      v.src = W.mode === 'device' ? status.url : `/stream?series_id=${W.sid}&ep=${n}`;
+      v.load();
+    } else if (status.state === 'error') {
+      fail(status.message || '本集准备失败，请重试');
+    } else if (W.activeEp !== n) {
+      $('#vtip').textContent = status.message || (status.state === 'working' ? `正在下载、解密并检查第${n}集…` : `第${n}集正在排队，准备完成后自动播放…`);
+    }
+  };
+  if (W.mode === 'device') {
+    try {
+      if (typeof DeviceMedia === 'undefined') throw new Error('设备播放模块未加载，请刷新页面');
+      DeviceMedia.supported();
+      W.device = new DeviceMedia.Session(W.sid, W.eps, data => update(data, W.ep, W.token));
+    } catch (error) { W.deviceError = error.message; }
+  }
+  W.prepare = async (retry = false) => {
+    if (W.mode === 'device') {
+      if (W.deviceError) { fail(W.deviceError); return; }
+      return W.device.select(W.ep, retry);
+    }
+    const token = W.token, n = W.ep;
+    const body = {client, series_id: W.sid, ep: n, completed: W.completed, retry};
+    const prepare = async () => update(await post('/playback/prepare', body), n, token);
+    return window.CodingTVTransition ? CodingTVTransition.run(W, prepare) : prepare();
+  };
+  W.load = (n, first = false, retry = false, automatic = false) => {
+    if (n < 1 || n > W.eps.length) return;
+    if (n === W.ep && !first && !automatic) retry = true;
+    if (!W.alive) { go(`#/watch/${W.sid}/${n}`); return; }
+    W.save();
+    const rec = hist.get(W.sid);
+    W.resumePos = first && W.resumeAt !== undefined ? Math.max(0, Number(W.resumeAt) || 0) :
+      (first || retry) && rec && Number(rec.ep) === n && !rec.finished ? Math.max(0, Number(rec.pos) || 0) : 0;
+    W.mediaReady = false; W.metadataReady = false; W.finished = false; W.saveT = null;
+    if (!automatic && !retry) W.completed = 0;
+    if (!retry) mediaRetry = 0;
+    v.pause(); v.removeAttribute('src'); v.load();
+    W.ep = n; W.activeEp = 0; W.token++; pollFailures = 0; pollFailureAt = 0;
+    W.statusPoll?.select();
+    $('#vload').style.display = 'flex';
+    $('#vload .spin').style.display = '';
+    $('#vretry').style.display = 'none';
+    $('#vstart').style.display = 'none';
+    $('#vtip').textContent = `正在连接队列，准备第${n}集…`;
+    $('#wtitle').textContent = `${W.title ? W.title + ' · ' : ''}第${n}集`;
+    $('#wtitle').title = $('#wtitle').textContent;
+    $('#watch-series').textContent = W.title || '当前剧集';
+    $('#watch-position').textContent = `第 ${n} 集 / 共 ${W.eps.length} 集`;
+    $('#watch-episode').title = $('#wtitle').textContent;
+    document.title = `${W.title ? W.title + ' · ' : ''}第${n}集 · coding伴侣`;
+    document.querySelectorAll('.ditem').forEach(x => x.classList.toggle('cur', +x.dataset.ep === n));
+    document.querySelector('.ditem.cur')?.scrollIntoView({ block: 'nearest' });
+    const token = W.token;
+    const cached = window.CodingTVTransition?.cached(W, n, automatic, retry) || transition?.select(n, retry);
+    if (cached) update(cached, n, token);
+    W.prepare(retry).catch(() => { if (token === W.token) fail(W.mode === 'device' ? '设备直连准备失败，请重试或切换 NAS 模式' : '缓存服务暂时无法连接，请重试'); });
+  };
+  let preparing = false;
+  W.statusPoll = CodingPlaybackStatus.create({
+    live: () => W.mode !== 'device' && W.alive && W.client === client,
+    current: () => ({token: W.token, n: W.ep}),
+    read: (snapshot, signal) => api(`/playback/status?series_id=${W.sid}&ep=${snapshot.n}`, {signal}),
+    update: (data, snapshot) => { update(data, snapshot.n, snapshot.token); if (snapshot.token === W.token) { pollFailures = 0; pollFailureAt = 0; } },
+    fail: snapshot => {
+      if (snapshot.token !== W.token) return;
+      if (!pollFailureAt) pollFailureAt = Date.now();
+      if (++pollFailures >= 5 && Date.now() - pollFailureAt >= 10000 && !W.activeEp) fail('与 NAS 的连接中断，请重试');
+    }
+  });
+  W.heartbeat = setInterval(async () => {
+    if (W.mode === 'device' || !W.alive || preparing) return;
+    preparing = true;
+    try { await W.prepare(); } catch (_) {} finally { preparing = false; }
+  }, 15000);
+  W.stop = (finished = false) => {
+    if (!W.alive || W.client !== client) return;
+    W.save(); W.alive = false; W.token++;
+    W.statusPoll.stop(); transition?.stop(); clearInterval(W.heartbeat);
+    window.removeEventListener('beforeunload', W.unload);
+    window.removeEventListener('pagehide', W.unload);
+    document.removeEventListener('visibilitychange', W.visibility);
+    if (W.mode === 'device') { W.device?.stop(); return; }
+    if (finished) post('/playback/close', {client, finished: true}).catch(() => toast('清理请求未送达 NAS，可重新打开最后一集完成清理'));
+    else navigator.sendBeacon('/playback/close', new Blob([JSON.stringify({client, finished: false})], {type:'application/json'}));
+  };
+  // video events
+  v.addEventListener('pause', () => { if (W.client === client) W.save(); });
+  v.addEventListener('seeked', () => {
+    if (!W.alive || W.client !== client || !W.metadataReady || W.activeEp !== W.ep || v.seeking) return;
+    W.mediaReady = true;
+    W.save();
+  });
+  v.addEventListener('ratechange', () => {
+    W.speed = v.playbackRate;
+    if (v.defaultPlaybackRate !== W.speed) v.defaultPlaybackRate = W.speed;
+  });
+  v.addEventListener('waiting', () => { if (transition) transition.waiting(); else $('#vload').style.display = 'flex'; });
+  v.addEventListener('playing', () => { if (W.alive && W.client === client) { transition?.hide(); $('#vload').style.display = 'none'; } });
+  v.addEventListener('loadedmetadata', () => {
+    if (!W.alive || W.client !== client || W.activeEp !== W.ep || !v.getAttribute('src')) return;
+    W.metadataReady = true;
+    v.playbackRate = W.speed;
+    const pos = Number.isFinite(v.duration) && W.resumePos < v.duration ? W.resumePos : 0;
+    W.mediaReady = pos === 0 || Math.abs(v.currentTime - pos) < 0.1;
+    if (pos > 0 && !W.mediaReady) {
+      v.currentTime = pos;
+    }
+    W.resumePos = 0;
+    v.play().catch(() => {
+      if (!W.alive || !$('#vstart')) return;
+      transition?.show(); $('#vload .spin').style.display = 'none';
+      $('#vtip').textContent = '视频已准备好，点击开始播放';
+      $('#vstart').style.display = '';
+    });
+  });
+  v.addEventListener('timeupdate', () => {
+    if (!W.alive || W.client !== client || !W.mediaReady || !v.duration) return;
+    if (!W.saveT || Date.now() - W.saveT > 3000) { W.saveT = Date.now(); W.save(); }
+  });
+  let finishedToken = -1;
+  v.addEventListener('ended', async () => {
+    if (!W.alive || W.client !== client || finishedToken === W.token) return;
+    const token = W.token, ep = W.ep;
+    finishedToken = token;
+    W.save(true);
+    W.completed++;
+    const completion = (async () => { try {
+      if (W.mode === 'device') await W.device.complete(ep, ep === W.eps.length);
+      else if (window.CodingTVTransition) await CodingTVTransition.run(W, () => post('/playback/complete', {client, ep}));
+      else await post('/playback/complete', {client, ep});
+    }
+    catch (_) { toast(W.mode === 'device' ? '已播完；设备缓存清理失败，可在设置里清理' : '已播完；动态清理未送达 NAS，下次播完会继续清理'); } })();
+    if (window.CodingTVTransition?.advance(W)) W.load(ep + 1, false, false, true);
+    await completion;
+    if (!W.alive || W.client !== client || token !== W.token) return;
+    if (W.ep === W.eps.length) { W.stop(true); $('#cache-progress').textContent = W.mode === 'device' ? '本季已看完；已按设备设置清理缓存' : '本季已看完；若开启自动清理，缓存会在其他观看者退出后释放'; }
+    else if (W.auto) { W.load(W.ep + 1, false, false, true); }
+  });
+  v.addEventListener('error', () => {
+    if (!W.alive || !v.getAttribute('src')) return;
+    if (mediaRetry++ === 0) { W.load(W.ep, false, true); return; }
+    fail(W.mode === 'device' ? '此设备未能解码本集，请重试或手动切换 NAS 模式' : '浏览器未能载入本集。文件已检查，可重试本集或选择其他集');
+  });
+  W.unload = () => W.stop();
+  W.visibility = () => { if (document.hidden && W.client === client) W.save(); };
+  window.addEventListener('beforeunload', W.unload);
+  window.addEventListener('pagehide', W.unload);
+  document.addEventListener('visibilitychange', W.visibility);
+};
+W.save = finished => {
+  const v = W.video;
+  if (!v || !W.sid || !W.alive || !W.mediaReady || W.activeEp !== W.ep || v.seeking || W.finished) return;
+  const dur = v.duration || 0, pos = v.currentTime || 0;
+  if (!Number.isFinite(dur) || dur <= 0 || !Number.isFinite(pos)) return;
+  hist.put({ sid: W.sid, title: W.title || '', cover: W.cover || '',
+             ep: W.ep, epCnt: W.eps.length, pos: Math.min(pos, dur), dur, finished: !!finished });
+  if (finished) W.finished = true;
+};
+W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility']) delete W[key]; };
+/* ================= 视图: 收藏 ================= */
+async function vFav() {
+  renderGtabs(true); await CodingWatchState.ready(); if (location.hash !== '#/fav') return;
+  const a = favs.all(); CodingWatchUI.checkUpdates();
+  $('#view').innerHTML = `
+    <div class="sechead"><h2>收藏</h2><div class="sub"><span class="note" style="align-self:center">${a.length} 部</span></div></div>
+    ${a.length ? gridHTML(a.map(x => ({ ...x, series_id: x.sid, category: x.cat || '' }))) :
+      '<div class="empty"><div class="big">📚</div>还没有收藏，去发现页标记喜欢的剧吧</div>'}`;
+}
+
+/* ================= 视图: 历史 ================= */
+async function vHistory() {
+  renderGtabs(true); await CodingWatchState.ready(); if (location.hash !== '#/history') return;
+  const a = hist.all();
+  $('#view').innerHTML = `
+    <div class="sechead"><h2>观看历史</h2>
+      <div class="acts">${a.length ? '<button class="ghost" onclick="clearHist()">清空列表</button>' : ''}</div>
+    </div>
+    <div id="hbox">
+    ${a.length ? a.map(x => `
+      <div class="hrow" onclick="go('#/watch/${x.sid}/${x.ep}')">
+        <img class="hthumb" src="${imgx(x.cover)}" onerror="this.style.visibility='hidden'">
+        <div class="hinfo2">
+          <div class="t">${esc(x.title || '未知剧名')}</div>
+          <div class="m">${x.finished ? '已看完' : '看到'} 第${x.ep}集${x.epCnt ? ' / 共' + x.epCnt + '集' : ''} · ${fmtT(x.pos)}${x.dur ? ' / ' + fmtT(x.dur) : ''} · ${new Date(x.ts).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</div>
+          <div class="hbar"><i style="width:${Math.min(100, (x.pos||0)/(x.dur||1)*100).toFixed(1)}%"></i></div>
+        </div>
+        <div class="hacts">
+          <button class="ghost" onclick="event.stopPropagation();go('#/watch/${x.sid}/${x.ep}')">${x.finished ? '重新播放' : '从 ' + fmtT(x.pos) + ' 继续'}</button>
+          <button class="ghost" onclick="event.stopPropagation();delHist('${x.sid}')">删除</button>
+        </div>
+      </div>`).join('') : '<div class="empty"><div class="big">🕐</div>暂无观看记录</div>'}
+    </div>`;
+}
+function delHist(sid) { hist.remove(sid); vHistory(); toast('已删除该记录'); }
+function clearHist() {
+  if (!confirm('确定清空全部观看历史？收藏不受影响。')) return;
+  hist.clear(); vHistory(); toast('已清空观看历史');
+}
+
+async function changeSitePassword(event) {
+  event.preventDefault();
+  const message = $('#site-password-result'), button = $('#site-password-save');
+  const newPassword = $('#site-new').value;
+  if (newPassword !== $('#site-confirm').value) { message.textContent = '两次输入的新密码不一致'; return; }
+  button.disabled = true; message.textContent = '正在修改…';
+  try {
+    const response = await fetch('/auth/password', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({current_password:$('#site-current').value, new_password:newPassword})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '修改失败，请重试');
+    requireSiteLogin();
+  } catch (error) { message.textContent = error.message || '修改失败，请重试'; }
+  finally { button.disabled = false; }
+}
+async function logoutSite() {
+  W.stop?.();
+  try {
+    const response = await fetch('/auth/logout', {method:'POST'});
+    if (!response.ok) throw new Error('退出失败');
+    requireSiteLogin();
+  } catch (_) { toast('退出失败，请重试'); }
+}
+
+/* ================= 头部 tabs ================= */
+function renderGtabs(hide) {
+  const box = $('#gtabs');
+  if (hide) { box.innerHTML = ''; return; }
+  box.innerHTML = GENRES.map(g =>
+    `<div class="gtab ${g.id === curGenre ? 'on' : ''}" data-g="${g.id}" onclick="switchGenre('${g.id}')">${g.name}</div>`).join('');
+}
+function switchGenre(g) {
+  curGenre = g; localStorage.setItem('hg_genre', g);
+  if (location.hash.startsWith('#/discover') || location.hash === '' || location.hash === '#') route();
+  else go('#/discover');
+}
+
+/* ================= 路由 ================= */
+function route() {
+  discoverVersion++; CodingLibrary.stop();
+  CodingSettings.stop(); CodingPageRequests.stop();
+  CodingSearch.stop();
+  W.release();
+  introObserver?.disconnect();
+  introObserver = null;
+  document.title = 'coding伴侣';
+  const h = location.hash.replace(/^#\/?/, '');
+  const [view, ...rest] = h.split('/');
+  document.body.classList.toggle('watching', view === 'watch' && !!rest[0]);
+  $('#watch-series').textContent = view === 'watch' && rest[0] ? '正在读取剧集…' : '';
+  $('#watch-position').textContent = '';
+  if (view === 'watch' && rest[0]) $('#watch-back').href = '#/detail/' + encodeURIComponent(rest[0]);
+  document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.dataset.nav === view));
+  window.scrollTo(0, 0);
+  if (view === 'detail' && rest[0]) vDetail(rest[0]);
+  else if (view === 'watch' && rest[0]) vWatch(rest[0], parseInt(rest[1] || '1', 10), rest[2] === undefined ? undefined : Number(rest[2]));
+  else if (view === 'search') vSearch(decodeURIComponent(rest.join('/') || ''));
+  else if (view === 'rank') vRank();
+  else if (view === 'fav') vFav();
+  else if (view === 'history') vHistory();
+  else if (view === 'settings') vSettings();
+  else vDiscover();
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>登录 · coding伴侣</title>
+<style>
+*{box-sizing:border-box} :root{color-scheme:light;--bg:#f5f6f8;--surface:#fff;--text:#1f2129;--muted:#6b7080;--line:#e5e7ed;--control:#f6f7f9;--pink:#ff2e5f}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#111318;--surface:#1b1e26;--text:#edf0f5;--muted:#afb7c8;--line:#323744;--control:#272b35;--pink:#ff527b}}
+body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC",sans-serif;padding:24px}
+main{width:100%;max-width:400px;padding:32px;background:var(--surface);border:1px solid var(--line);border-radius:20px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;color:var(--pink);font-size:25px;font-weight:700}.brand svg{width:46px;height:46px;flex:none}
+h1{font-size:21px;margin:0 0 10px}.note{color:var(--muted);font-size:14px;line-height:1.7;margin:0 0 26px}
+label{display:block;font-size:14px;margin-bottom:10px}input,button{font:inherit;width:100%;min-height:48px;border-radius:10px}
+input{padding:12px 14px;background:var(--control);color:var(--text);border:1px solid var(--line);font-size:16px}input:focus{outline:2px solid var(--pink);outline-offset:2px}
+button{margin-top:18px;border:0;background:var(--pink);color:white;font-weight:600;font-size:16px;cursor:pointer}button:disabled{opacity:.6;cursor:wait}
+#message{min-height:24px;margin-top:14px;color:var(--pink);font-size:14px;line-height:1.6}.foot{margin-top:16px;color:var(--muted);font-size:12px}
+@media(max-width:767px){body{padding:max(24px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));-webkit-text-size-adjust:100%}main{padding:26px 22px}.brand{font-size:23px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="18" fill="#ff2e5f"/><rect x="10" y="13" width="44" height="38" rx="9" fill="#1b1e26"/><g fill="#aeb7c8"><circle cx="17" cy="20" r="1.5"/><circle cx="22" cy="20" r="1.5"/><circle cx="27" cy="20" r="1.5"/></g><path d="m23 29-6 6 6 6m18-12 6 6-6 6" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 29.5v11l8-5.5-8-5.5Z" fill="#ff527b"/></svg>coding伴侣</div>
+  <h1 id="heading">输入密码，继续看剧</h1>
+  <p class="note" id="description">这是你的私人影院。登录后可在设置里修改密码。</p>
+  <form id="login-form">
+    <label for="password">网站密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256" autofocus>
+    <div id="confirm-box" hidden style="margin-top:18px"><label for="confirm">再次输入密码</label><input id="confirm" type="password" autocomplete="new-password" maxlength="256"></div>
+    <button id="submit" type="submit">进入网站</button>
+    <div id="message" role="status" aria-live="polite"></div>
+  </form>
+  <div class="foot" id="foot">此设备登录有效期为 7 天，可在设置里退出登录。</div>
+</main>
+<script>
+const setupToken = new URLSearchParams(location.hash.slice(1)).get('setup');
+if (setupToken) {
+  document.querySelector('#heading').textContent = '首次使用，设置网站密码';
+  document.querySelector('#description').textContent = '请设置至少 8 位的密码，以后打开网站时用它登录。';
+  document.querySelector('#password').autocomplete = 'new-password';
+  document.querySelector('#password').minLength = 8;
+  document.querySelector('#confirm-box').hidden = false;
+  document.querySelector('#confirm').required = true;
+  document.querySelector('#confirm').minLength = 8;
+  document.querySelector('#submit').textContent = '保存密码';
+  document.querySelector('#foot').textContent = '初始化入口仅可使用一次，24 小时内有效。';
+}
+document.querySelector('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = document.querySelector('#submit'), message = document.querySelector('#message');
+  const password = document.querySelector('#password').value;
+  if (setupToken && password !== document.querySelector('#confirm').value) { message.textContent = '两次输入的密码不一致'; return; }
+  button.disabled = true; message.textContent = '正在验证…';
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(setupToken ? '/auth/setup' : '/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(setupToken ? {token:setupToken, password} : {password}), signal:controller.signal});
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '请检查密码后重试');
+    if (setupToken) { location.replace('/ui#/settings'); return; }
+    const next = new URLSearchParams(location.search).get('next') || '/ui';
+    const target = new URL(next, location.origin);
+    location.replace(target.origin === location.origin && next.startsWith('/') ? target.pathname + target.search + (target.hash || location.hash) : '/ui');
+  } catch (error) { message.textContent = error.name === 'AbortError' ? '验证超时，请重试' : error.message || '暂时无法连接，请重试'; }
+  finally { clearTimeout(timer); button.disabled = false; }
+});
+</script>
+</body>
+</html>
