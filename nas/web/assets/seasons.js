@@ -1,4 +1,4 @@
-// Season discovery and refresh UI; playback stays in the existing detail route.
+// Season discovery shared by detail and playback routes.
 const seasonSearchHints = new Map();
 function rememberSeasonSearch(query, results) {
   const hint = String(query || '').trim().slice(0, 100);
@@ -9,16 +9,21 @@ function rememberSeasonSearch(query, results) {
   });
   while (seasonSearchHints.size > 80) seasonSearchHints.delete(seasonSearchHints.keys().next().value);
 }
-async function loadSeasons(sid, slot, refresh = false, keepContent = false) {
-  clearTimeout(slot._seasonPoll);
-  if (!keepContent) slot.innerHTML = '<h3>全部季</h3><div class="season-note" role="status">首次查找其他季，结果会保存到 NAS…</div>';
+async function fetchSeasons(sid, refresh = false) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 60000);
   try {
     const hint = seasonSearchHints.get(String(sid));
     const response = await fetch('/seasons?series_id=' + encodeURIComponent(sid) + (refresh ? '&refresh=true' : '') + (hint ? '&search_hint=' + encodeURIComponent(hint) : ''), { signal: ctl.signal });
     if (!response.ok) throw new Error('获取失败');
-    const data = await response.json();
+    return await response.json();
+  } finally { clearTimeout(timer); }
+}
+async function loadSeasons(sid, slot, refresh = false, keepContent = false) {
+  clearTimeout(slot._seasonPoll);
+  if (!keepContent) slot.innerHTML = '<h3>全部季</h3><div class="season-note" role="status">首次查找其他季，结果会保存到 NAS…</div>';
+  try {
+    const data = await fetchSeasons(sid, refresh);
     if (!slot.isConnected || location.hash !== '#/detail/' + sid) return;
     slot.innerHTML = `<h3>全部季（${data.items.length}）</h3><div class="season-list"></div>`;
     const refreshButton = document.createElement('button'); refreshButton.className = 'season-retry';
@@ -55,10 +60,44 @@ async function loadSeasons(sid, slot, refresh = false, keepContent = false) {
       slot.innerHTML = '<h3>全部季</h3><div class="season-note">暂时无法获取其他季。</div>';
       addSeasonRetry(slot, sid, slot.querySelector('.season-note'));
     }
-  } finally { clearTimeout(timer); }
+  }
 }
 function addSeasonRetry(slot, sid, note) {
   const button = document.createElement('button'); button.className = 'season-retry';
   button.type = 'button'; button.textContent = '重试'; button.onclick = () => loadSeasons(sid, slot, true);
   note.appendChild(button);
+}
+async function bindNextSeasonButton(sid, button, onChange) {
+  clearTimeout(button._seasonPoll);
+  button.hidden = true; button.disabled = true; button.onclick = null;
+  try {
+    const data = await fetchSeasons(sid);
+    if (!button.isConnected || !location.hash.startsWith('#/watch/' + sid + '/')) return;
+    const items = Array.isArray(data.items) ? data.items.slice() : [];
+    const current = items.find(item => String(item.series_id) === String(sid));
+    if (!current) return;
+    const currentSeason = Number(current.season) || 0;
+    let next = currentSeason > 0 ? items
+      .filter(item => String(item.series_id) !== String(sid) && Number(item.season) > currentSeason)
+      .sort((a, b) => Number(a.season) - Number(b.season))[0] : null;
+    if (!next) {
+      const ordered = items.slice().sort((a, b) => (Number(a.season) || Number.MAX_SAFE_INTEGER) - (Number(b.season) || Number.MAX_SAFE_INTEGER));
+      const index = ordered.findIndex(item => String(item.series_id) === String(sid));
+      if (currentSeason <= 0 && index >= 0) next = ordered[index + 1];
+    }
+    if (next) {
+      button.hidden = false; button.disabled = false;
+      button.title = '播放' + (next.title || '下一季') + '第1集';
+      button.setAttribute('aria-label', button.title);
+      button.onclick = () => go('#/watch/' + next.series_id + '/1/0');
+      onChange?.(next);
+    } else if (data.refreshing) {
+      button._seasonPoll = setTimeout(() => {
+        if (button.isConnected && location.hash.startsWith('#/watch/' + sid + '/')) bindNextSeasonButton(sid, button, onChange);
+      }, 2000);
+    } else {
+      onChange?.(null);
+    }
+    return next || null;
+  } catch (_) { onChange?.(null); return null; }
 }

@@ -558,7 +558,7 @@
 <link rel="stylesheet" href="/ui/assets/watch-ui.css?v=1"><script src="/ui/assets/profiles.js?v=1"></script><script src="/ui/assets/watch-state.js?v=2"></script><script src="/ui/assets/watch-ui.js?v=2"></script>
 <script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/library.js?v=8"></script>
 <script src="/ui/assets/device-media.js?v=direct-1"></script>
-<script src="/ui/assets/seasons.js?v=1"></script><script src="/ui/assets/settings.js?v=4"></script><script src="/ui/assets/page-requests.js?v=1"></script>
+<script src="/ui/assets/seasons.js?v=2"></script><script src="/ui/assets/settings.js?v=4"></script><script src="/ui/assets/page-requests.js?v=1"></script>
 <script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=4"></script>
 <script>
 'use strict';
@@ -887,6 +887,7 @@ async function vWatch(sid, ep, resumeAt) {
         <button class="ghost" onclick="W.step(-1)">上一集</button>
         <button class="ghost" onclick="W.step(1)">下一集</button>
         <button class="autoc ${W.auto?'on':''}" id="autoc" onclick="W.toggleAuto()" aria-pressed="${W.auto}">自动连播</button>
+        <button class="ghost" id="next-season" type="button" hidden>下一季</button>
       </div>
       <div class="dh">选集（${eps.length}）</div><div class="note" id="cache-progress" style="padding:0 18px 12px">正在连接缓存队列…</div>
       <div class="dlist">
@@ -896,6 +897,10 @@ async function vWatch(sid, ep, resumeAt) {
     </div>
   </div>`;
   W.bind();
+  W.nextSeason = null;
+  bindNextSeasonButton(sid, $('#next-season'), next => {
+    if (W.sid === sid && $('#next-season')?.isConnected) W.nextSeason = next;
+  });
   W.load(W.ep, true);
 }
 
@@ -1096,7 +1101,11 @@ W.bind = () => {
     if (window.CodingTVTransition?.advance(W)) W.load(ep + 1, false, false, true);
     await completion;
     if (!W.alive || W.client !== client || token !== W.token) return;
-    if (W.ep === W.eps.length) { W.stop(true); $('#cache-progress').textContent = W.mode === 'device' ? '本季已看完；已按设备设置清理缓存' : '本季已看完；若开启自动清理，缓存会在其他观看者退出后释放'; }
+    if (W.ep === W.eps.length && W.auto && W.nextSeason) {
+      const nextSid = W.nextSeason.series_id;
+      W.stop(true); go(`#/watch/${nextSid}/1/0`);
+    }
+    else if (W.ep === W.eps.length) { W.stop(true); $('#cache-progress').textContent = W.mode === 'device' ? '本季已看完；已按设备设置清理缓存' : '本季已看完；若开启自动清理，缓存会在其他观看者退出后释放'; }
     else if (W.auto) { W.load(W.ep + 1, false, false, true); }
   });
   v.addEventListener('error', () => {
@@ -1119,7 +1128,7 @@ W.save = finished => {
              ep: W.ep, epCnt: W.eps.length, pos: Math.min(pos, dur), dur, finished: !!finished });
   if (finished) W.finished = true;
 };
-W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility']) delete W[key]; };
+W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility','nextSeason']) delete W[key]; };
 /* ================= 视图: 收藏 ================= */
 async function vFav() {
   renderGtabs(true); await CodingWatchState.ready(); if (location.hash !== '#/fav') return;
