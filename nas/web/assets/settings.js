@@ -37,21 +37,21 @@ async function vSettings() {
       <div class="kv"><span class="k">内容获取服务</span><span id="st2">—</span></div>
       <div style="margin-top:10px"><button class="ghost" onclick="refreshSettings()">重新检查</button></div>
     </div>
-    <div class="setbox"><h3>播放模式与设备缓存</h3>
-      <div class="note">自动按访问地址选择：局域网 IP 用 NAS，外网域名或公网 IP 用设备直连。设备直连的视频使用当前设备网络下载和解密；片单、链接和登录仍由 NAS 提供，需要 HTTPS。</div>
+    <div class="setbox"><h3>播放方式与两类缓存</h3>
+      <div class="note">这里包含两套用途不同的缓存：设备缓存只属于当前浏览器，用于设备直连；NAS 视频缓存保存在服务器，供家里所有设备使用。两者不会重复占用同一处空间。</div>
+      <h4 class="settings-subtitle">播放线路</h4>
       <div class="kv"><span class="k">播放模式</span><div class="theme-buttons" role="group" aria-label="播放模式">${[['auto','自动'],['nas','NAS'],['device','设备直连']].map(([mode,label])=>`<button type="button" data-play-mode="${mode}" aria-pressed="${deviceSettings.mode===mode}" onclick="setPlayMode('${mode}')">${label}</button>`).join('')}</div></div>
       <div class="note" id="device-mode-status"></div>
+      <div class="note" style="margin-top:8px">自动模式按访问地址选择线路。HTTP 可使用 NAS 播放；设备直连依赖浏览器安全环境，在 HTTPS 页面可用。</div>
+      <h4 class="settings-subtitle">当前设备缓存（仅此浏览器）</h4>
       <div class="kv"><label class="k" for="device-ahead">设备提前缓存集数</label><select id="device-ahead">${[1,2,3,4,5].map(n=>`<option value="${n}">${n} 集</option>`).join('')}</select></div>
       <div class="kv"><label class="k" for="device-limit">设备缓存容量上限</label><select id="device-limit">${[100,250,500,1000].map(n=>`<option value="${n}">${n} MB</option>`).join('')}</select></div>
       <div class="kv"><label for="device-previous">自然播完一集后清理本季当前及之前集</label><input id="device-previous" type="checkbox"></div>
       <div class="kv"><label for="device-cleanup">本季全部播完后清理本季设备缓存</label><input id="device-cleanup" type="checkbox"></div>
       <div class="note" id="device-usage">正在读取设备缓存…</div>
       <div class="note" style="margin-top:10px">缓存仅保存在当前浏览器，默认提前 3 集；容量不足时清理较旧缓存。退出播放页停止预缓存，已完成缓存保留。浏览器可能自行释放存储；不同访问地址的缓存不共用。直连失败不会自动切回 NAS。</div>
-      <button class="ghost" onclick="saveDeviceSettings()" style="margin-top:14px">保存设备缓存设置</button>
-      <button class="btn-line" onclick="clearDeviceCache()" style="margin-top:14px">清除此设备视频缓存</button>
-    </div>
-    <div class="setbox"><h3>连续播放与缓存</h3>
-      <div class="note">视频在 NAS 提前下载、解密并检查。设置保存在 NAS，供此网站的观看者使用。</div>
+      <h4 class="settings-subtitle">NAS 视频缓存（家庭共享）</h4>
+      <div class="note">视频在 NAS 提前下载、解密并检查。缓存和设置都保存在 NAS，同一网站下的手机、电脑和电视共同使用。</div>
       <div class="kv"><label class="k" for="cache-mode">缓存方式</label><select id="cache-mode">
         <option value="off">关闭预缓存</option><option value="ahead">提前缓存后续几集</option>
         <option value="full">缓存本季全部剩余集</option><option value="smart">智能：连续看完后缓存剩余集</option></select></div>
@@ -62,7 +62,8 @@ async function vSettings() {
       <div class="kv"><label for="cache-cleanup">看完本季最后一集后清理视频缓存</label><input id="cache-cleanup" type="checkbox"></div>
       <div class="note" id="cache-usage">正在读取缓存设置…</div>
       <div class="note" style="margin-top:10px">默认提前 5 集。当前播放优先，后台逐集准备；退出播放页后停止排队，已完成缓存保留。智能模式只计算连续自然播完的集数，手动跳集会重新计算。<br>保留至少 2 GB 磁盘空间；达到上限时暂停预缓存。动态清理只在自然播完时触发，手动跳集不触发；开启后，整季播完也会清理本季全部视频。正在使用的视频会延后释放。不影响收藏、进度或手工下载。</div>
-      <button class="ghost" id="cache-save" disabled style="margin-top:14px">保存缓存设置</button>
+      <button class="ghost" id="cache-save" disabled style="margin-top:14px">保存播放与缓存设置</button>
+      <button class="btn-line" onclick="clearDeviceCache()" style="margin-top:14px">清除此设备视频缓存</button>
     </div>
     <div class="setbox"><h3>一键清理</h3>
       <div class="note">清除 NAS 上的网站视频、片单、封面和全部季缓存，暂停现有播放会话的后台预缓存。正在播放的视频延后释放；切换集或重新进入播放页后恢复预缓存。收藏、观看进度、设置和手工下载保留。</div>
@@ -147,7 +148,8 @@ async function loadCacheSettings(page, signal) {
         try {
           const response = await fetch('/playback/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode:$('#cache-mode').value, ahead:+$('#cache-ahead').value, smart_after:+$('#cache-smart').value, limit_gb:+$('#cache-limit').value, cleanup:$('#cache-cleanup').checked, cleanup_previous:$('#cache-previous').checked})});
           if (!response.ok) throw new Error('保存失败');
-          if (settingsLive(page)) toast('缓存设置已保存，播放页会自动采用');
+          DeviceMedia.save({ahead:+$('#device-ahead').value,limit:+$('#device-limit').value,previous:$('#device-previous').checked,cleanup:$('#device-cleanup').checked});
+          if (settingsLive(page)) toast('播放与缓存设置已保存，播放页会自动采用');
         } catch (_) { if (settingsLive(page)) toast('设置保存失败，请重试'); } finally { if (settingsLive(page)) save.disabled = false; }
       };
       page.ready = true;
@@ -169,10 +171,6 @@ async function initDeviceSettings(page = settingsPage) {
   $('#device-previous').checked=s.previous; $('#device-cleanup').checked=s.cleanup;
   setPlayMode(s.mode, false);
   try {const usage=await DeviceMedia.usage();if(settingsLive(page)) $('#device-usage').textContent=`此设备已缓存 ${usage.episodes} 集 · ${(usage.bytes/1024**2).toFixed(1)} MB`;} catch (_) {if(settingsLive(page)) $('#device-usage').textContent='此浏览器无法使用设备缓存；NAS 模式仍可使用';}
-}
-function saveDeviceSettings() {
-  DeviceMedia.save({ahead:+$('#device-ahead').value,limit:+$('#device-limit').value,previous:$('#device-previous').checked,cleanup:$('#device-cleanup').checked});
-  toast('设备缓存设置已保存');
 }
 async function clearDeviceCache() {
   const page = settingsPage;
