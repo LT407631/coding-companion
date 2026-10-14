@@ -43,6 +43,15 @@ class Source:
         return result
 
 
+class Fallback:
+    def __init__(self, rows):
+        self.rows, self.calls = rows, []
+
+    def search(self, query):
+        self.calls.append(query)
+        return self.rows
+
+
 class SearchPageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -79,6 +88,20 @@ class SearchPageTests(unittest.TestCase):
         self.assertEqual(len(self.source.calls), 1)
         self.assertEqual(self.source.calls[0][2]['count'], '0')
         self.assertEqual(self.page()[0], result)
+        self.assertEqual(len(self.source.calls), 1)
+
+    def test_first_page_uses_bounded_fallback_when_legacy_search_fails(self):
+        self.source.replies = [ValueError('empty legacy response')]
+        fallback = Fallback([{'series_id': '6906763079292292104', 'title': '尸帝'},
+                             {'series_id': '6906763079292292104', 'title': '重复'}])
+        self.search = SearchPages(self.source, self.cache, fallback)
+        result, state = self.page('尸帝')
+        self.assertEqual(state, 'MISS')
+        self.assertEqual(result['results'], [{'series_id': '6906763079292292104', 'title': '尸帝'}])
+        self.assertTrue(result['source_fallback'])
+        self.assertFalse(result['has_more'])
+        self.assertEqual(fallback.calls, ['尸帝'])
+        self.assertEqual(self.page('尸帝')[0], result)
         self.assertEqual(len(self.source.calls), 1)
 
     def test_deduplicates_across_pages_and_preserves_provider_pagination(self):

@@ -32,6 +32,7 @@ from search_pages import install_search
 from source_requests import SourceRequests
 from media_source import MediaSource
 from hongguo_track_provider import HongguoTrackProvider, download_with_fallback
+from hongguo_web_search import HongguoWebSearch
 from timings import Timings, TimingMiddleware
 
 app = server.app
@@ -48,7 +49,7 @@ tv_compat = TvCompatibilityCache(Path(server.H.OUT_DIR) / ".tv_compat")
 
 
 catalog = CatalogCache(Path(server.H.OUT_DIR) / ".catalog_cache")
-search_pages = install_search(app, source, catalog)
+search_pages = install_search(app, source, catalog, HongguoWebSearch())
 install_library(app, server.H, catalog)
 watch_state = WatchState(Path(server.H.OUT_DIR) / '.watch_state.sqlite3')
 def follow_count(sid):

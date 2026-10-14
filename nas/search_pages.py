@@ -49,8 +49,8 @@ def _token(state):
 
 
 class SearchPages:
-    def __init__(self, source, cache):
-        self.source, self.cache = source, cache
+    def __init__(self, source, cache, fallback=None):
+        self.source, self.cache, self.fallback = source, cache, fallback
 
     def page(self, query, cursor=''):
         query = _query(query)
@@ -118,9 +118,16 @@ class SearchPages:
         for key in ('passback', 'search_id'):
             if state[key]:
                 params[key] = state[key]
-        response = self.source.api('GET', '/reading/bookapi/search/tab/v', extra_query=params)
+        try:
+            response = self.source.api('GET', '/reading/bookapi/search/tab/v', extra_query=params)
+        except Exception:
+            if self.fallback is None or state['pages']:
+                raise
+            return self._fallback(state)
         if not isinstance(response, dict) or response.get('code', 0) not in (0, '0'):
-            raise ValueError('Invalid upstream search response')
+            if self.fallback is None or state['pages']:
+                raise ValueError('Invalid upstream search response')
+            return self._fallback(state)
         tabs = response.get('search_tabs')
         if not isinstance(tabs, list):
             raise ValueError('Missing upstream search tabs')
@@ -172,9 +179,25 @@ class SearchPages:
         return Payload(json_bytes({'query': state['query'], 'results': results,
                                    'has_more': more, 'next_cursor': next_cursor}))
 
+    def _fallback(self, state):
+        results = self.fallback.search(state['query'])
+        if not isinstance(results, list) or len(results) > 50:
+            raise ValueError('Invalid fallback search results')
+        clean, seen = [], set()
+        for row in results:
+            if not isinstance(row, dict):
+                continue
+            sid = str(row.get('series_id') or '')
+            if re.fullmatch(r'\d{1,24}', sid) and sid not in seen:
+                seen.add(sid)
+                clean.append(dict(row, series_id=sid))
+        return Payload(json_bytes({'query': state['query'], 'results': clean,
+                                   'has_more': False, 'next_cursor': None,
+                                   'source_fallback': True}))
 
-def install_search(app, source, cache):
-    search = SearchPages(source, cache)
+
+def install_search(app, source, cache, fallback=None):
+    search = SearchPages(source, cache, fallback)
 
     @app.get('/search/page')
     def search_page(request: Request, q: str = Query(..., max_length=120),
