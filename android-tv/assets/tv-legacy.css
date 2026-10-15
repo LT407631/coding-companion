@@ -1,0 +1,13 @@
+/* Layout fallbacks for Android 5-era WebViews without CSS Grid, flex gap or CSS variables. */
+html.coding-tv-legacy body{background:#111318;color:#edf0f5}
+html.coding-tv-legacy .side,html.coding-tv-legacy .top,html.coding-tv-legacy .hero,html.coding-tv-legacy .epswrap,html.coding-tv-legacy .setbox,html.coding-tv-legacy .epdrawer{background:#1b1e26}
+html.coding-tv-legacy .grid{display:flex;flex-wrap:wrap;margin-left:-9px;margin-right:-9px}
+html.coding-tv-legacy .grid>.card{width:12.5%;padding-left:9px;padding-right:9px;margin-bottom:26px;box-sizing:border-box}
+html.coding-tv-legacy .eps{display:flex;flex-wrap:wrap;margin-left:-5px;margin-right:-5px}
+html.coding-tv-legacy .eps>.ep{display:flex;align-items:center;justify-content:center;width:calc(12.5% - 10px);margin:5px;box-sizing:border-box;background:#272b35;color:#e1e6ef}
+html.coding-tv-legacy .watch-resumes{display:flex;flex-wrap:wrap}
+html.coding-tv-legacy .watch-resumes>.watch-resume{width:calc(16.666667% - 12px);margin:6px;box-sizing:border-box}
+html.coding-tv-legacy .tv-phone-panel{display:flex}
+html.coding-tv-legacy .tv-phone-panel>div:first-child{flex:1;margin-right:50px}
+html.coding-tv-legacy .theme-buttons{display:none!important}
+@media(max-width:1600px){html.coding-tv-legacy .grid>.card{width:16.666667%}html.coding-tv-legacy .eps>.ep{width:calc(16.666667% - 10px)}}

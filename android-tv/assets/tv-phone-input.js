@@ -4,19 +4,17 @@
   var state = null, modal = null, trigger = null, network = 'auto', installedTV = null;
   function externalAddress() {return window.CodingTVConnection && window.CodingTVConnection.wan || '';}
   function message(text) { if (modal) modal.querySelector('.tv-phone-message').textContent = text; }
-  async function request(path, method, body) {
+  function request(path, method, body) {
     var controller = new AbortController(), timer = setTimeout(function () {controller.abort();}, 10000);
-    try {
-      var response = await fetch(path, {method:method || 'GET', credentials:'same-origin', cache:'no-store', headers:body ? {'Content-Type':'application/json'} : undefined, body:body ? JSON.stringify(body) : undefined, signal:controller.signal});
-      var data;
-      try {data = await response.json();}
-      catch (error) {
+    return fetch(path, {method:method || 'GET', credentials:'same-origin', cache:'no-store', headers:body ? {'Content-Type':'application/json'} : undefined, body:body ? JSON.stringify(body) : undefined, signal:controller.signal}).then(function (response) {
+      return response.json().catch(function () {
         if (response.ok) throw new Error('手机输入服务响应格式异常，请检查 NAS 服务。');
-        data = {};
-      }
-      if (!response.ok) {var error = new Error(typeof data.detail === 'string' ? data.detail : '手机输入暂不可用'); error.status = response.status; throw error;}
-      return data;
-    } finally {clearTimeout(timer);}
+        return {};
+      }).then(function (data) {
+        if (!response.ok) {var error = new Error(typeof data.detail === 'string' ? data.detail : '手机输入暂不可用'); error.status = response.status; throw error;}
+        return data;
+      });
+    }).then(function (data) {clearTimeout(timer);return data;}, function (error) {clearTimeout(timer);throw error;});
   }
   function disposePair(pair) { return request('/phone-input/pairs/' + encodeURIComponent(pair), 'DELETE').catch(function () {}); }
   function hide() {
@@ -52,11 +50,10 @@
     image.src = '/phone-input/pairs/' + encodeURIComponent(current.pair) + '/qr';
     message('配对有效期 ' + Math.ceil(Math.max(0, current.deadline - Date.now()) / 60000) + ' 分钟');
   }
-  async function poll(current) {
+  function poll(current) {
     if (state !== current) return;
     if (Date.now() >= current.deadline) {stop();return;}
-    try {
-      var data = await request('/phone-input/pairs/' + encodeURIComponent(current.pair));
+    return request('/phone-input/pairs/' + encodeURIComponent(current.pair)).then(function (data) {
       if (state !== current) return;
       current.deadline = Date.now() + data.expires_in * 1000;
       if (data.version > current.version && data.query) {
@@ -68,31 +65,29 @@
         }
       }
       if (modal) message('配对有效期 ' + Math.ceil(data.expires_in / 60) + ' 分钟，等待手机输入');
-    } catch (error) {
+    }).catch(function (error) {
       if (state !== current) return;
       if (error.status === 401 || error.status === 404) {stop();return;}
       message('连接暂时中断，正在重连；也可取消后重新配对。');
-    }
-    if (state === current) current.timer = setTimeout(function () {poll(current);}, 1500);
+    }).then(function () {if (state === current) current.timer = setTimeout(function () {poll(current);}, 1500);});
   }
-  async function open() {
+  function open() {
     draw();
     if (state && state.pair) {showQR(state);return;}
     if (state) return;
     var current = {version:0}; state = current;
-    try {
-      var origin = network === 'local' ? '' : externalAddress();
-      var data = await request('/phone-input/pairs', 'POST', {public_origin:origin});
+    var origin = network === 'local' ? '' : externalAddress();
+    return request('/phone-input/pairs', 'POST', {public_origin:origin}).then(function (data) {
       if (state !== current) {disposePair(data.pair);return;}
       current.pair = data.pair; current.deadline = Date.now() + data.expires_in * 1000;
       if (trigger) {trigger.textContent = '手机已配对';trigger.classList.add('paired');}
       showQR(current);poll(current);
-    } catch (error) {
+    }).catch(function (error) {
       if (state !== current) return;
       state = null;
       message(error.status === 401 ? '请先在电视登录网站，再重新配对。' : error.status === 404 ? '请确认 NAS 已更新手机输入服务，再重新配对。' : error.message || '暂时无法配对，请重试。');
       if (modal) modal.querySelector('.tv-phone-qr span').textContent = '暂不可用';
-    }
+    });
   }
   function handleKey(code) {
     if (!modal) return false;

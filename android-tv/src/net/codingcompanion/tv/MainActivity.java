@@ -75,7 +75,7 @@ public final class MainActivity extends Activity {
         web.setFocusable(true);
         web.setFocusableInTouchMode(true);
         try {
-            adapter = "(function(){if(document.getElementById('coding-tv-style'))return;var s=document.createElement('style');s.id='coding-tv-style';s.textContent="+JSONObject.quote(asset("tv.css")+"\n"+asset("tv-phone-input.css"))+";document.head.appendChild(s);})();\n"+asset("tv-appearance.js")+"\n"+asset("tv-native.js")+"\n"+asset("tv-diagnostics.js")+"\n"+asset("tv-transition.js")+"\n"+asset("tv-hud.js")+"\n"+asset("tv-phone-input.js")+"\n"+asset("tv.js")+"\nwindow.CodingTVPhone.installKeys();";
+            adapter = "(function(){document.documentElement.classList.add('coding-tv-legacy');if(document.getElementById('coding-tv-style'))return;var s=document.createElement('style');s.id='coding-tv-style';s.textContent="+JSONObject.quote(asset("tv.css")+"\n"+asset("tv-phone-input.css")+"\n"+asset("tv-legacy.css"))+";document.head.appendChild(s);})();\n"+asset("tv-appearance.js")+"\n"+asset("tv-native.js")+"\n"+asset("tv-diagnostics.js")+"\n"+asset("tv-transition.js")+"\n"+asset("tv-hud.js")+"\n"+asset("tv-phone-input.js")+"\n"+asset("tv.js")+"\nwindow.CodingTVPhone.installKeys();";
         } catch (Exception e) { showError("电视适配文件无法读取，请重新安装 APK。"); return; }
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return navigation(url); }
@@ -84,18 +84,26 @@ public final class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 if (!allowed(url)) return;
                 pageBackground(url);
+                Uri page=Uri.parse(url);
+                if ("/ui".equals(page.getPath()) && !"1".equals(page.getQueryParameter("compat"))) {
+                    view.loadUrl(uiUrl());
+                    return;
+                }
+                if (!"/ui".equals(page.getPath())) {
+                    CookieManager.getInstance().flush();
+                    return;
+                }
                 // TV firmware often reports a phone-sized CSS viewport even on a 4K panel.
                 int width=Math.max(1280,Math.min(2560,view.getWidth()));
                 float scale=view.getWidth()/getResources().getDisplayMetrics().density/width;
                 view.evaluateJavascript("(function(){var m=document.querySelector('meta[name=viewport]');if(m)m.content='width="+width+",initial-scale="+scale+"';})();\n"+"window.CodingTVConnection={wan:"+JSONObject.quote(savedSites()[1])+"};\n"+adapter, null);
-                view.evaluateJavascript("typeof W==='undefined' && !document.querySelector('#login-form')", value -> {
-                    if ("true".equals(value) && errorView==null) showError("页面未正常启动。旧电视可能需要升级系统 WebView；也请检查 NAS 地址。");
-                });
                 CookieManager.getInstance().flush();
                 nativePlayer.installDiagnostics();
-                view.evaluateJavascript("typeof W!=='undefined' && !document.querySelector('#login-form')", value -> {
-                    if("true".equals(value)&&url.equals(view.getUrl())&&allowed(view.getUrl()))updater.autoCheck(site);
-                });
+                view.postDelayed(() -> view.evaluateJavascript("typeof W!=='undefined'", value -> {
+                    if (!url.equals(view.getUrl()) || !allowed(view.getUrl())) return;
+                    if ("true".equals(value)) updater.autoCheck(site);
+                    else if ("false".equals(value) && errorView==null) showError("服务器已连接，但当前电视浏览器仍无法运行页面。请升级系统 WebView 或安装更新后的 APK。");
+                }), 1200);
             }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if(r.isForMainFrame()) showError("连接网站失败。请确认电视和 NAS 网络互通，或选择下方修改服务器地址。");
@@ -118,7 +126,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onHideCustomView() { closeFullscreen(); }
         });
-        nativePlayer.resume();web.loadUrl(site+"/ui");
+        nativePlayer.resume();web.loadUrl(uiUrl());
         web.requestFocus();
         if(!prefs.getBoolean("configured",false)) configure();
     }
@@ -156,6 +164,7 @@ public final class MainActivity extends Activity {
         web.requestFocus();immersive();
     }
     private String[] savedSites(){return new String[]{prefs.getString("lan",DEFAULT_SITE),prefs.getString("wan","https://nas.example.com")};}
+    private String uiUrl(){return site+"/ui?compat=1";}
     private void configure() {
         String[] urls=savedSites();final int[] selected={site.equals(urls[1])?1:0};
         String[] labels={"内网 · 家中\n"+urls[0],"外网 · 外出\n"+urls[1]};
@@ -163,7 +172,7 @@ public final class MainActivity extends Activity {
             .setSingleChoiceItems(labels,selected[0],(d,n)->selected[0]=n)
             .setPositiveButton("连接",(d,n)->{
                 site=urls[selected[0]];prefs.edit().putString("site",site).putBoolean("configured",true).apply();
-                closeFullscreen();nativePlayer.setSite(site);hideError();web.loadUrl(site+"/ui");web.requestFocus();
+                closeFullscreen();nativePlayer.setSite(site);hideError();web.loadUrl(uiUrl());web.requestFocus();
             }).setNeutralButton("编辑并保存地址",(d,n)->editAddress(selected[0])).setNegativeButton("关闭",null).create();
         dialog.show();dialog.getListView().setSelection(selected[0]);dialog.getListView().requestFocus();
     }
@@ -194,7 +203,7 @@ public final class MainActivity extends Activity {
         if(errorView!=null) return;
         LinearLayout box=new LinearLayout(this);box.setOrientation(1);box.setPadding(48,48,48,48);box.setBackgroundColor(Color.rgb(17,19,24));
         TextView message=new TextView(this);message.setText(text);message.setTextColor(Color.WHITE);message.setTextSize(26);box.addView(message);
-        Button retry=new Button(this);retry.setText("重新连接");retry.setOnClickListener(v->{hideError();web.loadUrl(site+"/ui");});box.addView(retry);
+        Button retry=new Button(this);retry.setText("重新连接");retry.setOnClickListener(v->{hideError();web.loadUrl(uiUrl());});box.addView(retry);
         Button address=new Button(this);address.setText("修改服务器地址");address.setOnClickListener(v->configure());box.addView(address);
         errorView=box;root.addView(box,new FrameLayout.LayoutParams(-1,-1));retry.requestFocus();
     }

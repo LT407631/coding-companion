@@ -17,7 +17,7 @@ class WebAssetsTest(unittest.TestCase):
         context = {'__file__': str(source), 'Path': Path, 'HTTPException': NotFound,
                    'FileResponse': lambda path, headers: (path, headers)}
         exec(compile(ast.Module(body=[handler], type_ignores=[]), str(source), 'exec'), context)
-        for name in ['seasons.js', 'watch-state.js', 'watch-ui.js', 'watch-ui.css', 'settings.js', 'page-requests.js', 'library.js', 'library-store.js', 'library-scroll.js', 'device-media.js', 'search.js', 'playback-status.js']:
+        for name in ['seasons.js', 'watch-state.js', 'watch-ui.js', 'watch-ui.css', 'settings.js', 'page-requests.js', 'library.js', 'library-store.js', 'library-scroll.js', 'device-media.js', 'search.js', 'playback-status.js', 'legacy-polyfills.js', 'legacy-app.js', 'legacy-worker.js', 'legacy.css']:
             path, headers = context['browser_asset'](name)
             self.assertTrue(path.is_file())
             self.assertIn('private', headers['Cache-Control'])

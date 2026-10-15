@@ -39,7 +39,7 @@ app = server.app
 timings = Timings()
 source = SourceRequests(server.H, timings)
 app.add_middleware(TimingMiddleware, timings=timings)
-app.router.routes = [route for route in app.router.routes if getattr(route, "path", None) not in {"/", "/stream", "/prefetch", "/img"}]
+app.router.routes = [route for route in app.router.routes if getattr(route, "path", None) not in {"/", "/ui", "/stream", "/prefetch", "/img"}]
 site_auth = SiteAuth(Path(server.H.OUT_DIR) / ".site_auth.sqlite3")
 install_auth(app, site_auth, Path(__file__).parent / "web" / "login.html")
 install_phone_input(app, Path(__file__).parent / "web")
@@ -198,9 +198,15 @@ playback = PlaybackCache(server.STREAM_CACHE, build_media, validate=checked_medi
                          prepare_tracks=media_source.prefetch, foreground_worker=True)
 
 
+@app.get("/ui", include_in_schema=False)
+def browser_ui(compat: bool = False):
+    page = "app-legacy.html" if compat else "app.html"
+    return FileResponse(Path(__file__).parent / "web" / page, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/ui/assets/{name}", include_in_schema=False)
 def browser_asset(name: str):
-    if name not in {"device-media.js", "device-worker.js", "device-crypto.js", "coding-companion.svg", "library.js", "library-grid.js", "library-store.js", "library-scroll.js", "library.css", "settings.js", "page-requests.js", "watch-state.js", "watch-ui.js", "watch-ui.css", "profiles.js", "seasons.js", "search.js", "playback-status.js"}:
+    if name not in {"device-media.js", "device-worker.js", "device-crypto.js", "coding-companion.svg", "library.js", "library-grid.js", "library-store.js", "library-scroll.js", "library.css", "settings.js", "page-requests.js", "watch-state.js", "watch-ui.js", "watch-ui.css", "profiles.js", "seasons.js", "search.js", "playback-status.js", "legacy-polyfills.js", "legacy-app.js", "legacy-worker.js", "legacy.css"}:
         raise HTTPException(404)
     return FileResponse(Path(__file__).parent / "web" / "assets" / name, headers={"Cache-Control": "private, max-age=0, must-revalidate"})
 
