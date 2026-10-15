@@ -610,11 +610,11 @@ function requireSiteLogin() {
 }
 const siteFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
+  if (!(args[0] instanceof Request)) args[1] = {credentials: 'same-origin', ...args[1]};
   const response = await siteFetch(...args);
   const requestURL = args[0] instanceof Request ? args[0].url : String(args[0]);
   if (response.status === 401 && new URL(requestURL, location.href).origin === location.origin) requireSiteLogin();
-  return response;
-};
+  return response; };
 window.addEventListener('pageshow', event => {
   if (event.persisted) fetch('/playback/settings', {cache:'no-store'}).catch(() => {});
 });

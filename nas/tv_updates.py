@@ -12,8 +12,9 @@ MAX_BYTES = 128 * 1024 * 1024
 
 
 class TvReleases:
-    def __init__(self, directory):
+    def __init__(self, directory, prefix="/updates/android-tv"):
         self.directory = Path(directory).resolve()
+        self.prefix = prefix
 
     def latest(self):
         manifest = self.directory / 'latest.json'
@@ -46,7 +47,7 @@ class TvReleases:
                 raise ValueError()
             return {key: data[key] for key in ('package', 'version_code', 'version_name', 'size', 'min_sdk', 'sha256')} | {
                 'available': True, 'notes': data.get('notes', ''),
-                'url': '/updates/android-tv/' + digest + '.apk',
+                'url': self.prefix + '/' + digest + '.apk',
             }
         except (OSError, ValueError, TypeError, KeyError):
             raise HTTPException(503, '电视更新文件不完整，请管理员重新发布')
@@ -69,5 +70,22 @@ def install_tv_updates(app, directory):
         return FileResponse(releases.directory / filename, media_type='application/vnd.android.package-archive',
                             filename='coding-companion-tv-' + release['version_name'] + '.apk',
                             headers={'Cache-Control': 'private, no-store'})
+
+    # Only separately published, sanitized APKs belong in this directory.
+    public_releases = TvReleases(Path(directory).parent / 'tv-updates-public', '/updates/android-tv-public')
+
+    @app.get('/updates/android-tv-public/latest', include_in_schema=False)
+    def public_latest():
+        return JSONResponse(public_releases.latest(), headers={'Cache-Control': 'no-store'})
+
+    @app.get('/updates/android-tv-public/{filename}', include_in_schema=False)
+    def public_download(filename: str):
+        if not re.fullmatch(r'[0-9a-f]{64}\.apk', filename):
+            raise HTTPException(404)
+        release = public_releases.latest()
+        if not release['available'] or filename != release['sha256'] + '.apk':
+            raise HTTPException(404)
+        return FileResponse(public_releases.directory / filename, media_type='application/vnd.android.package-archive',
+                            headers={'Cache-Control': 'no-store'})
 
     return releases

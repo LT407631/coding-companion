@@ -18,7 +18,7 @@ final class UpdatePolicy {
     static int port(URI u) {return u.getPort()<0?("https".equals(u.getScheme())?443:80):u.getPort();}
     static URI download(String site,String value,String hash) throws Exception {
         URI base=origin(site),url=base.resolve(new URI(value));
-        if(!base.getScheme().equals(url.getScheme()) || !base.getHost().equalsIgnoreCase(url.getHost()) || port(base)!=port(url) || url.getUserInfo()!=null || url.getQuery()!=null || url.getFragment()!=null || !url.getRawPath().equals("/updates/android-tv/"+hash+".apk")) throw new Exception("更新下载地址不属于当前 NAS");
+        if(!base.getScheme().equals(url.getScheme()) || !base.getHost().equalsIgnoreCase(url.getHost()) || port(base)!=port(url) || url.getUserInfo()!=null || url.getQuery()!=null || url.getFragment()!=null || !(url.getRawPath().equals("/updates/android-tv/"+hash+".apk") || url.getRawPath().equals("/updates/android-tv-public/"+hash+".apk"))) throw new Exception("更新下载地址不属于当前 NAS");
         return url;
     }
     static boolean newer(String pkg,int version,int minSdk,long size,String hash,int installed,int sdk) throws Exception {

@@ -11,7 +11,6 @@ import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-import android.webkit.CookieManager;
 import android.widget.TextView;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -45,11 +44,9 @@ final class TvUpdater {
         activeSite=site;
         if(dialog!=null&&dialog.isShowing()||(worker!=null&&worker.isAlive())||autoChecking)return;
         if(site.equals(checkedSite)&&System.currentTimeMillis()<nextCheckAt)return;
-        String currentCookie=CookieManager.getInstance().getCookie(site+"/updates/android-tv/latest");
-        if(currentCookie==null||currentCookie.isEmpty())return;
         checkedSite=site;nextCheckAt=System.currentTimeMillis()+30000;
         cancelled=false;autoChecking=true;
-        String cookie=currentCookie;
+        String cookie=null;
         worker=new Thread(()->{
             JSONObject found=null;
             boolean succeeded=false;
@@ -98,7 +95,7 @@ final class TvUpdater {
             .setNegativeButton("关闭",null).create();
         dialog.setOnDismissListener(d->{cancelled=true;HttpURLConnection c=connection;if(c!=null)c.disconnect();});
         dialog.show();
-        String cookie=CookieManager.getInstance().getCookie(site+"/updates/android-tv/latest");
+        String cookie=null;
         worker=new Thread(()->check(site,cookie),"tv-update");worker.start();
     }
     private void message(String text) {
@@ -160,7 +157,7 @@ final class TvUpdater {
     private JSONObject readRelease(String site,String cookie) throws Exception {
         HttpURLConnection c=null;
         try {
-            c=open(UpdatePolicy.origin(site).resolve("/updates/android-tv/latest"),cookie);
+            c=open(UpdatePolicy.origin(site).resolve("/updates/android-tv-public/latest"),cookie);
             try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[4096];int count;
                 while((count=in.read(buffer))!=-1) {

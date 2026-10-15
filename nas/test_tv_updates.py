@@ -25,6 +25,28 @@ class TvUpdateTests(unittest.TestCase):
         self.write_manifest()
         self.token, _ = self.login()
 
+    def test_public_feed_is_separate_and_business_stays_private(self):
+        self.release()
+        status, _, body = self.request('/updates/android-tv-public/latest')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {'available': False})
+        public = self.directory.parent / 'tv-updates-public'
+        public.mkdir()
+        (public / 'latest.json').write_text(json.dumps(self.manifest))
+        (public / (self.digest + '.apk')).write_bytes(self.apk)
+        status, _, body = self.request('/updates/android-tv-public/latest')
+        self.assertEqual(status, 200)
+        path = json.loads(body)['url']
+        self.assertEqual(path, '/updates/android-tv-public/' + self.digest + '.apk')
+        self.assertEqual(self.request(path)[2], self.apk)
+        status, _, body = self.request(path, headers={'range': 'bytes=0-3'})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, self.apk[:4])
+        for denied in ['/watch-state', '/search', '/updates/android-tv/latest', self.path,
+                       '/updates/android-tv-public/latest.json', '/updates/android-tv-public/../latest']:
+            self.assertEqual(self.request(denied)[0], 401, denied)
+        self.assertEqual(self.request(path, method='POST')[0], 401)
+
     def write_manifest(self):
         (self.directory / 'latest.json').write_text(json.dumps(self.manifest))
 

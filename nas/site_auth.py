@@ -1,5 +1,6 @@
 """Shared website password and revocable, persistent browser sessions."""
 import argparse
+import re
 import hashlib
 import hmac
 import secrets
@@ -160,7 +161,8 @@ class AuthMiddleware:
         # Uvicorn runs with proxy_headers=False; this exemption is Docker-local only.
         local_health = path == "/healthz" and method in {"GET", "HEAD"} and peer in {"127.0.0.1", "::1"}
         public = (path == "/login" and method in {"GET", "HEAD"}) or (path in {"/auth/login", "/auth/login-form", "/auth/setup"} and method == "POST")
-        if not public and not local_health and not self.auth.valid(request.cookies.get(COOKIE)):
+        public_update = method in {"GET", "HEAD"} and re.fullmatch(r"/updates/android-tv-public/(latest|[0-9a-f]{64}\.apk)", path) is not None
+        if not public and not public_update and not local_health and not self.auth.valid(request.cookies.get(COOKIE)):
             if path in {"/", "/ui", "/phone-input"} and method in {"GET", "HEAD"}:
                 query = scope.get("query_string", b"").decode("ascii", errors="ignore")
                 target = path + ("?" + query if query else "")
