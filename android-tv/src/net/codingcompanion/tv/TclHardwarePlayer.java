@@ -121,9 +121,11 @@ final class TclHardwarePlayer extends MediaPlayer {
     @Override public int getVideoWidth(){return width;}
     @Override public int getVideoHeight(){return height;}
     @Override public synchronized void seekTo(int ms){
+        long before=position();
         target=Math.min(Math.max(0,ms),Math.max(0,duration-1));generation++;
         wallPosition=target;wall=SystemClock.elapsedRealtime();audioBase=-1;audioEpoch=-1;
         completionReported=false;videoDone=false;audioDone=audioInput==null;
+        if(RedmiPlayback.applies())note("decoder-seek,fromMs="+before+",targetMs="+target+",generation="+generation);
     }
     @Override public PlaybackParams getPlaybackParams(){return new PlaybackParams().allowDefaults().setSpeed(speed);}
     @Override public void setPlaybackParams(PlaybackParams params){
@@ -193,7 +195,14 @@ final class TclHardwarePlayer extends MediaPlayer {
                 if(!awaitPlaying())break;
                 if(epoch!=generation){
                     if(epoch>=0)codec.flush();epoch=generation;extractor.seekTo(target*1000L,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);eos=false;written=0;audioBase=-1;
-                    if(track!=null){track.pause();track.flush();}
+                    if(track!=null){
+                        track.pause();
+                        if(RedmiPlayback.applies()){
+                            audio=null;long oldHead=Integer.toUnsignedLong(track.getPlaybackHeadPosition());
+                            track.release();track=null;
+                            note("decoder-audio-reset,generation="+epoch+",targetMs="+target+",oldHeadFrames="+oldHead+",method=recreate");
+                        }else track.flush();
+                    }
                 }
                 eos=feed(codec,extractor,eos);int output=codec.dequeueOutputBuffer(info,10000);
                 if(output==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
