@@ -78,6 +78,7 @@ final class TvPlaybackDiagnostics {
             String selected=m.getString(MediaPlayer.MetricsConstants.CODEC_VIDEO);
             note+=",codec="+selected+",hardware="+hardware(selected);
             if(m.containsKey("coding.video.engine"))note+=",engine="+m.getString("coding.video.engine");
+            if(m.containsKey("coding.video.output")){note=note.replace("textureFps=","surfaceFps=");note+=",output="+m.getString("coding.video.output")+",renderedTotal="+m.getLong("coding.video.rendered");}
             if(m.containsKey("coding.video.pts"))note+=",avDeltaMs="+(m.getLong("coding.video.pts")-position);
             // OEMs may omit either counter. Missing is never reported as zero drops.
             Object count=m.get(MediaPlayer.MetricsConstants.FRAMES),dropped=m.get(MediaPlayer.MetricsConstants.FRAMES_DROPPED);

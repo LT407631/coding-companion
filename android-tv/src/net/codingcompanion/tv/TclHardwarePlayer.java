@@ -27,7 +27,8 @@ final class TclHardwarePlayer extends MediaPlayer {
     private volatile long wall, wallPosition, audioBase=-1, audioEpoch=-1;
     private volatile AudioTrack audio;
     private volatile int audioRate;
-    private volatile long frames, dropped;
+    private volatile long frames, dropped, renderedFrames;
+    private Runnable renderedFrame;
     private volatile long videoPts=-1;
     private Surface surface;
     private TclMediaSource.Input input;
@@ -48,6 +49,7 @@ final class TclHardwarePlayer extends MediaPlayer {
         this.report=report;
         input=new TclMediaSource.Input(url,headers.get("Cookie"),headers.get("X-Coding-Media"),report);
     }
+    void rendered(Runnable callback){renderedFrame=callback;}
     void ticket(String value){TclMediaSource.Input current=input;if(current!=null)current.ticket(value);}
     private void note(String text){if(!closed&&report!=null)report.status(text);}
     @Override public void setSurface(Surface value){surface=value;}
@@ -144,6 +146,7 @@ final class TclHardwarePlayer extends MediaPlayer {
         try{
             codec=HardwareVideoCodec.open(component,videoFormat,surface,this::note);openedComponent=codec.getName();
             note("decoder-open,name="+openedComponent+",classification="+(android.os.Build.VERSION.SDK_INT>=29?"platform-hardware":"vendor-allowlist")+",width="+width+",height="+height);
+            if(renderedFrame!=null)codec.setOnFrameRenderedListener((decoder,pts,nanos)->{if(!closed){renderedFrames++;renderedFrame.run();}},callbacks);
             MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int epoch=-1;boolean eos=false,seekReported=false;
             while(!closed){
                 if(!awaitPlaying())break;
@@ -229,6 +232,7 @@ final class TclHardwarePlayer extends MediaPlayer {
         PersistableBundle metrics=new PersistableBundle();
         if(!openedComponent.isEmpty())metrics.putString(MetricsConstants.CODEC_VIDEO,openedComponent);
         metrics.putString("coding.video.engine","named-platform");
+        if(renderedFrame!=null){metrics.putString("coding.video.output","surface-view");metrics.putLong("coding.video.rendered",renderedFrames);}
         metrics.putLong("coding.video.pts",videoPts);
         metrics.putLong(MetricsConstants.FRAMES,frames);metrics.putLong(MetricsConstants.FRAMES_DROPPED,dropped);return metrics;
     }

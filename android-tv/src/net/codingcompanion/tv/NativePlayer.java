@@ -26,11 +26,13 @@ import java.util.Map;
 final class NativePlayer implements TextureView.SurfaceTextureListener {
     private final Activity activity;
     private final WebView web;
-    private final TextureView picture;
+    private final View picture;
+    private final TextureView texture;
+    private final RedmiVideoOutput direct;
     private final Handler handler=new Handler();
     private final NextMedia next;
     private MediaPlayer media;
-    private boolean browser, resumeBrowser;
+    private boolean browser, resumeBrowser, surfaceRestore, restorePlaying, directResume;
     private final SharedPreferences decoderPrefs;
     private PlaybackFallback fallback;
     private final TvPlaybackDiagnostics diagnostics;
@@ -48,12 +50,19 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
 
     NativePlayer(Activity a, FrameLayout root, WebView w, String base) {
         activity=a;web=w;site=base;diagnostics=new TvPlaybackDiagnostics(a,w,base);next=new NextMedia(a);decoderPrefs=a.getSharedPreferences("tv-decoder",Activity.MODE_PRIVATE);requestedMode=decoderPrefs.getString("mode",PlaybackFallback.AUTO);if(!validSelection(requestedMode)){requestedMode=PlaybackFallback.AUTO;decoderPrefs.edit().putString("mode",requestedMode).apply();}if(!PlaybackFallback.valid(decoderPrefs.getString("successful","")))decoderPrefs.edit().putString("successful","").apply();
-        picture=new TextureView(a);picture.setOpaque(false);picture.setSurfaceTextureListener(this);
+        if(RedmiPlayback.applies()){
+            texture=null;direct=new RedmiVideoOutput(a,new RedmiVideoOutput.Listener(){
+                public void ready(Surface value){surface=value;diagnostics.record("system-open","output=surface-view");wake();}
+                public void gone(Surface value){if(surface==value){surface=null;if(!browser){surfaceRestore=prepared;restorePlaying=playing||directResume;resumePosition=Math.max(0,positionMs());releasePlayers();directResume=false;}}}
+            });picture=direct;
+        }else{
+            direct=null;texture=new TextureView(a);texture.setOpaque(false);texture.setSurfaceTextureListener(this);picture=texture;
+        }
         picture.setVisibility(View.INVISIBLE);root.addView(picture,0,new FrameLayout.LayoutParams(1,1));
     }
     void setSite(String base){stopMedia();site=base;diagnostics.setSite(base);}
     void installDiagnostics(){if(trustedPage())diagnostics.install();}
-    void resume(){if(running)return;running=true;if(media!=null&&!prepared)prepareDeadline=SystemClock.elapsedRealtime()+20000;if(browser){prepareDeadline=SystemClock.elapsedRealtime()+20000;if(resumeBrowser)browserControl("play");resumeBrowser=false;}handler.post(tick);}
+    void resume(){if(running)return;running=true;if(direct!=null&&prepared&&media!=null&&directResume){try{media.start();playing=true;directResume=false;}catch(Exception ignored){}}if(media!=null&&!prepared)prepareDeadline=SystemClock.elapsedRealtime()+20000;if(browser){prepareDeadline=SystemClock.elapsedRealtime()+20000;if(resumeBrowser)browserControl("play");resumeBrowser=false;}handler.post(tick);}
     private static boolean validSelection(String mode){return PlaybackFallback.valid(mode);}
     void wake(){
         if(!running||!trustedPage())return;
@@ -61,8 +70,8 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         if(busy){wakePending=true;return;}
         handler.post(tick);
     }
-    void suspend(){diagnostics.resetFrames(false);running=false;prepareDeadline=0;next.clear();handler.removeCallbacks(tick);if(browser){resumeBrowser=playing;browserControl("pause");playing=false;}else if(prepared&&media!=null){try{media.pause();}catch(Exception ignored){} playing=false;}}
-    void destroy(){diagnostics.close();suspend();stopMedia();if(surface!=null){surface.release();surface=null;}}
+    void suspend(){if(running&&direct!=null)directResume=playing;diagnostics.resetFrames(false);running=false;prepareDeadline=0;next.clear();handler.removeCallbacks(tick);if(browser){resumeBrowser=playing;browserControl("pause");playing=false;}else if(prepared&&media!=null){try{media.pause();}catch(Exception ignored){} playing=false;}}
+    void destroy(){diagnostics.close();suspend();if(direct!=null)direct.close();stopMedia();if(surface!=null){if(texture!=null)surface.release();surface=null;}}
     private boolean trustedPage(){
         Uri page=Uri.parse(web.getUrl()==null?"":web.getUrl()),base=Uri.parse(site);
         return sameOrigin(page,base) && "/ui".equals(page.getPath());
@@ -168,6 +177,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
             final MediaPlayer p=standby==null?((TvCompatibility.applies(Build.MODEL)||RedmiPlayback.applies())?TclMediaSource.createHardware():TclMediaSource.create()):standby;media=p;
             prepareDeadline=SystemClock.elapsedRealtime()+20000;
             p.setSurface(surface);
+            if(direct!=null&&p instanceof TclHardwarePlayer)((TclHardwarePlayer)p).rendered(()->{if(media==p&&prepared&&playing){rendered=true;diagnostics.frame();}});
             p.setOnVideoSizeChangedListener((m,w,h)->{if(media==m){videoW=w;videoH=h;fit();}});
             p.setOnPreparedListener(m->{if(media!=m||token!=id)return;onPrepared(m);});
             p.setOnCompletionListener(m->{if(media==m){playing=false;completedNaturally=true;report("ended",m.getDuration()/1000.0,m.getDuration()/1000.0,null,true);}});
@@ -194,7 +204,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
     private void openBrowser(String raw,int id){
         next.clear();
         try{
-            String url=mediaURL(raw);diagnostics.source(url);diagnostics.record("browser-open","starting");browser=true;picture.setAlpha(0f);web.setBackgroundColor(Color.BLACK);prepareDeadline=SystemClock.elapsedRealtime()+20000;
+            String url=mediaURL(raw);diagnostics.source(url);diagnostics.record("browser-open","starting");browser=true;if(direct!=null)direct.visible(false);picture.setAlpha(0f);web.setBackgroundColor(Color.BLACK);prepareDeadline=SystemClock.elapsedRealtime()+20000;
             web.evaluateJavascript("window.CodingNative && CodingNative.useBrowser("+id+","+JSONObject.quote(url)+","+(resumePosition/1000.0)+","+speed+")",result->wake());
         }catch(Exception e){failure("浏览器播放器暂不可用");}
     }
@@ -205,6 +215,12 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         prepared=true;prepareDeadline=0;videoW=m.getVideoWidth();videoH=m.getVideoHeight();fit();
         diagnostics.record("system-prepared","width="+videoW+",height="+videoH+",durationMs="+m.getDuration());
         if(resumePosition>0)m.seekTo((int)Math.min(Math.max(0,m.getDuration()-250),resumePosition));
+        if(surfaceRestore){
+            surfaceRestore=false;
+            if(restorePlaying){m.start();playing=true;report("playing",resumePosition/1000.0,m.getDuration()/1000.0,null);}
+            else report("pause",resumePosition/1000.0,m.getDuration()/1000.0,null);
+            restorePlaying=false;wake();return;
+        }
         report("loadedmetadata",resumePosition/1000.0,m.getDuration()/1000.0,null,true);
     }
     private void command(JSONObject c)throws Exception{
@@ -249,18 +265,20 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)picture.getLayoutParams();
         int x=Math.max(0,(int)(r.getDouble("x")*scale)),y=Math.max(0,(int)(r.getDouble("y")*scale));
         if(lp.width!=w||lp.height!=h||lp.leftMargin!=x||lp.topMargin!=y){lp.width=w;lp.height=h;lp.leftMargin=x;lp.topMargin=y;picture.setLayoutParams(lp);fit();}
+        if(direct!=null)direct.visible(!browser);
         picture.setAlpha(browser?0f:1f);picture.setVisibility(View.VISIBLE);
     }
     private void fit(){
         if(videoW<=0||videoH<=0)return;
+        if(direct!=null){direct.fit(videoW,videoH);return;}
         FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)picture.getLayoutParams();
         float ratio=Math.min(lp.width/(float)videoW,lp.height/(float)videoH);
-        Matrix transform=new Matrix();transform.setScale(videoW*ratio/lp.width,videoH*ratio/lp.height,lp.width/2f,lp.height/2f);picture.setTransform(transform);
+        Matrix transform=new Matrix();transform.setScale(videoW*ratio/lp.width,videoH*ratio/lp.height,lp.width/2f,lp.height/2f);texture.setTransform(transform);
     }
     private void stopMedia(){stopMedia(true);}
-    private void stopMedia(boolean hide){releasePlayers();completedNaturally=false;failed=false;token=-1;source="";mediaTicket="";fallback=null;resumePosition=0;speed=1;if(hide)picture.setVisibility(View.INVISIBLE);}
-    public void onSurfaceTextureAvailable(SurfaceTexture t,int w,int h){surface=new Surface(t);wake();}
+    private void stopMedia(boolean hide){surfaceRestore=false;restorePlaying=false;directResume=false;releasePlayers();completedNaturally=false;failed=false;token=-1;source="";mediaTicket="";fallback=null;resumePosition=0;speed=1;if(hide)picture.setVisibility(View.INVISIBLE);}
+    public void onSurfaceTextureAvailable(SurfaceTexture t,int w,int h){if(texture==null)return;surface=new Surface(t);wake();}
     public void onSurfaceTextureSizeChanged(SurfaceTexture t,int w,int h){fit();}
-    public boolean onSurfaceTextureDestroyed(SurfaceTexture t){if(!browser)stopMedia();if(surface!=null){surface.release();surface=null;}return true;}
-    public void onSurfaceTextureUpdated(SurfaceTexture t){if(prepared&&playing){rendered=true;diagnostics.frame();}}
+    public boolean onSurfaceTextureDestroyed(SurfaceTexture t){if(texture==null)return true;if(!browser)stopMedia();if(surface!=null){surface.release();surface=null;}return true;}
+    public void onSurfaceTextureUpdated(SurfaceTexture t){if(texture!=null&&prepared&&playing){rendered=true;diagnostics.frame();}}
 }
