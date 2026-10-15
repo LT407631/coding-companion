@@ -44,7 +44,7 @@ site_auth = SiteAuth(Path(server.H.OUT_DIR) / ".site_auth.sqlite3")
 install_auth(app, site_auth, Path(__file__).parent / "web" / "login.html")
 install_phone_input(app, Path(__file__).parent / "web")
 install_tv_updates(app, os.environ.get('CODING_TV_UPDATE_DIR', str(Path(server.H.OUT_DIR) / 'tv-updates')))
-season_cache = SeasonCache(Path(server.H.OUT_DIR) / ".season_cache.json", fallback=HongguoWebSearch())
+season_cache = SeasonCache(Path(server.H.OUT_DIR) / ".season_cache.json", fallback=HongguoWebSearch(), website_only=True)
 tv_compat = TvCompatibilityCache(Path(server.H.OUT_DIR) / ".tv_compat")
 
 
@@ -56,7 +56,7 @@ def search_detail(series_id):
 
 
 search_pages = install_search(app, source, catalog,
-                              HongguoWebSearch(resolve=search_detail))
+                              HongguoWebSearch(resolve=search_detail), website_only=True)
 install_library(app, server.H, catalog)
 watch_state = WatchState(Path(server.H.OUT_DIR) / '.watch_state.sqlite3')
 def follow_count(sid):

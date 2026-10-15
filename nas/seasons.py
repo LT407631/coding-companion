@@ -8,7 +8,7 @@ import threading
 import time
 
 
-SCAN_VERSION = 4
+SCAN_VERSION = 5
 MAX_CANDIDATES = 120
 
 
@@ -21,9 +21,10 @@ class _Lookup:
 
 class SeasonCache:
     """Persist album lists; serve stale data while a single worker refreshes it."""
-    def __init__(self, path, ttl=86400, fallback=None):
+    def __init__(self, path, ttl=86400, fallback=None, website_only=False):
         self.path, self.ttl = Path(path), ttl
         self.fallback = fallback
+        self.website_only = website_only
         self._lock = threading.RLock()
         self._miss_jobs = {}
         self._jobs, self._retry_after = {}, {}
@@ -104,6 +105,8 @@ class SeasonCache:
         options = {"refresh": refresh, "search_hint": search_hint}
         if self.fallback is not None:
             options["fallback"] = self.fallback
+        if self.website_only:
+            options['website_only'] = True
         return get_seasons(h, sid, **options)
 
     def get(self, h, sid, refresh=False, search_hint=""):
@@ -183,14 +186,19 @@ def _item(sid, video):
             "episode_cnt": video.get("episode_cnt") or 0}
 
 
-def get_seasons(h, sid, refresh=False, search_hint="", fallback=None):
+def _website_ids(fallback, query):
+    return {str(row['series_id']) for row in fallback.search(query)[:MAX_CANDIDATES]
+            if isinstance(row, dict) and re.fullmatch(r'\d{1,24}', str(row.get('series_id') or ''))}
+
+
+def get_seasons(h, sid, refresh=False, search_hint="", fallback=None, website_only=False):
     current = _detail(h, [sid]).get(sid)
     if not current:
         raise ValueError("剧集不存在")
     album = str(current.get("related_album_id") or "")
     if not album:
         return {"items": [_item(sid, current)], "partial": False, "album_id": ""}
-    key = h.SG.cache_key("nas-seasons-v4", album)
+    key = h.SG.cache_key("nas-seasons-v5", album)
     cached = h.SG.cache_get(key)
     if not refresh and cached is not None and (not search_hint or cached.get("lookup_query") == search_hint) and any(str(item["series_id"]) == sid for item in cached["items"]):
         return cached
@@ -202,7 +210,10 @@ def get_seasons(h, sid, refresh=False, search_hint="", fallback=None):
     offset, passback, search_id = 0, "", ""
     visited = set()
     partial = False
-    for _ in range(12):
+    if website_only:
+        ids.update(_website_ids(fallback, query_title))
+        partial = True
+    for _ in range(0 if website_only else 12):
         token = (str(offset), passback)
         if token in visited:
             partial = True
@@ -234,12 +245,7 @@ def get_seasons(h, sid, refresh=False, search_hint="", fallback=None):
                 raise
             # Suggestions are discovery candidates, never authoritative album
             # membership. All IDs are still checked against platform metadata.
-            for row in fallback.search(query_title):
-                candidate = str(row.get('series_id') or '')
-                if re.fullmatch(r'\d{1,24}', candidate):
-                    ids.add(candidate)
-                if len(ids) >= MAX_CANDIDATES:
-                    break
+            ids.update(_website_ids(fallback, query_title))
             partial = True
             break
         for cell in cells:

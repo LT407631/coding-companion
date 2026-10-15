@@ -41,6 +41,14 @@ def row(sid, title):
 
 
 class SeasonsTests(unittest.TestCase):
+    def test_website_only_uses_metadata_but_never_legacy_search(self):
+        h = FakePlatform({'1': video('故事第一季', 1), '2': video('故事第二季', 2)}, {})
+        fallback = SimpleNamespace(search=lambda query: [row('2', '故事第二季')])
+        data = get_seasons(h, '1', fallback=fallback, website_only=True)
+        self.assertEqual([v['season'] for v in data['items']], [1, 2])
+        self.assertTrue(data['partial'])
+        self.assertTrue(all(call[0] == 'POST' for call in h.calls))
+
     def test_empty_legacy_body_uses_fallback_and_verifies_album(self):
         h = FakePlatform({'1': video('黑蛋第一季', 1),
                           '2': video('黑蛋第二季', 2),

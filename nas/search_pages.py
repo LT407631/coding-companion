@@ -49,14 +49,19 @@ def _token(state):
 
 
 class SearchPages:
-    def __init__(self, source, cache, fallback=None):
+    def __init__(self, source, cache, fallback=None, website_only=False):
         self.source, self.cache, self.fallback = source, cache, fallback
+        self.website_only = website_only
+        if website_only and fallback is None:
+            raise ValueError('Website search must be configured')
 
     def page(self, query, cursor=''):
         query = _query(query)
         if not isinstance(cursor, str) or not re.fullmatch(CURSOR_PATTERN, cursor):
             raise HTTPException(400, '搜索游标无效')
         namespace = _namespace(self.source)
+        if self.website_only:
+            namespace += ':website-only-v1'
         state = None
         if cursor:
             entry = self.cache.read('search-cursor-v1:' + cursor)
@@ -113,6 +118,8 @@ class SearchPages:
             return False
 
     def _load(self, state, generation):
+        if self.website_only:
+            return self._fallback(state)
         params = {'query': state['query'], 'tab_name': 'feed', 'search_source': '1',
                   'offset': str(state['offset']), 'count': '0', 'use_correct': 'true'}
         for key in ('passback', 'search_id'):
@@ -200,8 +207,8 @@ class SearchPages:
                                    'source_fallback': True}))
 
 
-def install_search(app, source, cache, fallback=None):
-    search = SearchPages(source, cache, fallback)
+def install_search(app, source, cache, fallback=None, website_only=False):
+    search = SearchPages(source, cache, fallback, website_only=website_only)
 
     @app.get('/search/page')
     def search_page(request: Request, q: str = Query(..., max_length=120),

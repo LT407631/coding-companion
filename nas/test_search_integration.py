@@ -56,6 +56,9 @@ class NasIntegrationTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_private_search_paging_and_legacy_contract(self):
+        # Compatibility behavior remains testable but is no longer production's source policy.
+        self.assertTrue(self.module.search_pages.website_only)
+        self.module.search_pages.website_only = False
         self.assertEqual(self.request('/search/page?q=fixture')[0], 401)
         status, headers, raw = self.request('/search/page?q=fixture', cookie=self.cookie)
         self.assertEqual(status, 200)
@@ -92,6 +95,7 @@ class NasIntegrationTests(unittest.TestCase):
     def test_seasons_use_bounded_source_and_existing_web_fallback(self):
         cache = self.module.season_cache
         self.assertIsInstance(cache.fallback, self.module.HongguoWebSearch)
+        self.assertTrue(cache.website_only)
         data = {'items': [{'series_id': '1', 'season': 1}], 'partial': True}
         with patch.object(cache, 'get', return_value=data) as lookup:
             self.assertEqual(self.request('/seasons?series_id=1')[0], 401)
@@ -99,3 +103,13 @@ class NasIntegrationTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(json.loads(body), data)
             lookup.assert_called_once_with(self.module.source, '1', refresh=False, search_hint='')
+
+    def test_production_search_calls_only_website(self):
+        fallback = self.module.search_pages.fallback
+        with patch.object(fallback, 'search', return_value=[{'series_id': '123', 'title': '官网结果'}]) as search:
+            for query in ('one', 'two'):
+                status, _, raw = self.request('/search/page?q=' + query, cookie=self.cookie)
+                self.assertEqual(status, 200)
+                self.assertTrue(json.loads(raw)['source_fallback'])
+            self.assertEqual(search.call_count, 2)
+        self.assertEqual(self.calls, [])

@@ -1,3 +1,5 @@
+FROM node:24.22.0-bookworm-slim AS signer-runtime
+
 FROM python:3.12-slim-bookworm
 
 # NAS 无法直连 deb.debian.org；仅在镜像内换源，保留 Debian 的签名校验。
@@ -13,6 +15,9 @@ RUN pip install --no-cache-dir -r /tmp/hongguo-requirements.txt \
 COPY run /app/run
 COPY *.py /app/run/app/
 COPY web /app/run/app/web
+COPY vendor/hongguo-sign /app/run/app/vendor/hongguo-sign
+COPY --from=signer-runtime /usr/local/bin/node /usr/local/bin/hongguo-node
+COPY --from=signer-runtime /usr/local/LICENSE /usr/local/share/doc/hongguo-node/LICENSE
 WORKDIR /app/run/app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

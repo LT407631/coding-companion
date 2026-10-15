@@ -10,6 +10,7 @@ from hongguo_track_provider import download_with_fallback, HongguoSourceError, H
 class Response:
     def __init__(self, body, chunks=None, error=None):
         self.body = body
+        self.content = json.dumps(body).encode() if body is not None else b''
         self.chunks = chunks or []
         self.error = error
 
@@ -53,36 +54,97 @@ class Legacy:
 
 class ProviderTests(unittest.TestCase):
     def provider(self, bodies, legacy=None):
-        return HongguoTrackProvider(legacy or Legacy(), Session(bodies), min_interval=0)
+        def signer(vid):
+            return {'url': HongguoTrackProvider.MODEL_URL + '?version_code=71332',
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'mixed_video_id_map': {'1004': [vid]}})}
+        return HongguoTrackProvider(legacy or Legacy(), Session(bodies), min_interval=0, signer=signer)
 
-    def test_returns_tracks_from_current_single_video_api(self):
-        tracks = [{"main_url": "https://media.test/a", "video_meta": {"size": 3}}]
-        provider = self.provider([{"Code": 0, "data": {"video_model": json.dumps({"video_list": tracks})}}])
+    def test_returns_hd_tracks_from_fixed_signed_api(self):
+        tracks = [{"main_url": "https://media.test/a", "video_meta": {"size": 3, "definition": "720p", "codec_type": "hevc", "vwidth": 1280, "vheight": 720}}]
+        provider = self.provider([{"Code": 0, "data": {"123": {"video_model": json.dumps({"video_list": tracks})}}}])
         result = provider.get_video_tracks(["123"])
         self.assertEqual(result["123"][0]["main_url"], tracks[0]["main_url"])
-        self.assertEqual(result["123"][0]["video_meta"], tracks[0]["video_meta"])
+        self.assertEqual(result["123"][0]["video_meta"]["definition"], "720p")
         url, options = provider.session.calls[0]
-        self.assertIn("api5-normal-sinfonlineb.fqnovel.com/novel/player/video_model/v1/", url)
-        self.assertIn("version_code=73532", url)
-        self.assertEqual(json.loads(options["data"])["video_id"], "123")
-        self.assertTrue(options["headers"]["X-Gorgon"].startswith("8404401c0000"))
+        self.assertIn("api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/", url)
+        self.assertIn("version_code=71332", url)
+        self.assertEqual(json.loads(options["data"])["mixed_video_id_map"], {"1004": ["123"]})
+        self.assertEqual(len(provider.session.calls), 1)
+        self.assertEqual(provider.legacy.calls, [])
 
-    def test_falls_back_to_legacy_cached_track(self):
+    def test_never_returns_to_failed_legacy_api_even_with_old_tracks(self):
         old = [{"main_url": "https://media.test/old"}]
         legacy = Legacy({"123": old})
         provider = self.provider([{"Code": 101000, "Message": "服务异常"}], legacy)
-        self.assertEqual(provider.get_video_tracks(["123"], force=True), {"123": old})
-        self.assertEqual(legacy.calls, [(["123"], True)])
+        with self.assertRaisesRegex(HongguoSourceError, '101000'):
+            provider.get_video_tracks(["123"], force=True)
+        self.assertEqual(legacy.calls, [])
+
+    def test_empty_hd_response_stops_without_old_api_or_low_quality(self):
+        from source_requests import SourceUnavailable
+        legacy = Legacy({'123': [{'main_url': 'https://media.test/old'}]})
+        provider = self.provider([None], legacy)
+        with self.assertRaisesRegex(SourceUnavailable, '空响应'):
+            provider.get_video_tracks(['123'])
+        self.assertEqual(legacy.calls, [])
+
+    def test_prefers_1080_even_if_720_file_is_larger(self):
+        tracks = [
+            {'main_url': 'https://media.test/720', 'video_meta': {'definition': '720p', 'codec_type': 'hevc', 'size': 900, 'vwidth': 1280, 'vheight': 720}},
+            {'main_url': 'https://media.test/1080', 'video_meta': {'definition': '1080p', 'codec_type': 'hevc', 'size': 500, 'vwidth': 1920, 'vheight': 1080}},
+            {'main_url': 'https://media.test/proprietary', 'video_meta': {'definition': '1080p', 'codec_type': 'bytevc2', 'size': 999, 'vwidth': 1920, 'vheight': 1080}},
+        ]
+        provider = self.provider([{'code': 0, 'data': {'123': {'video_model': {'video_list': tracks}}}}])
+        result = provider.get_video_tracks(['123'])['123']
+        self.assertEqual([t['main_url'] for t in result], ['https://media.test/1080'])
+
+    def test_mislabeled_1080_is_reported_as_actual_720(self):
+        track = {'main_url': 'https://media.test/native', 'video_meta': {
+            'definition': '1080p', 'codec_type': 'hevc', 'vwidth': 1280, 'vheight': 720}}
+        provider = self.provider([{'code': 0, 'data': {'123': {'video_model': {'video_list': [track]}}}}])
+        self.assertEqual(provider.get_video_tracks(['123'])['123'][0]['video_meta']['definition'], '720p')
+
+    def test_unknown_dimensions_cannot_be_treated_as_hd(self):
+        track = {'main_url': 'https://media.test/unknown', 'definition': '1080p', 'codec_type': 'hevc'}
+        provider = self.provider([{'code': 0, 'data': {'123': {'video_model': {'video_list': [track]}}}}])
+        with self.assertRaises(HongguoSourceError):
+            provider.get_video_tracks(['123'])
 
     def test_non_track_calls_delegate_to_existing_provider(self):
         provider = self.provider([], Legacy())
         self.assertEqual(provider.get_episodes("456"), ({"series_id": "456"}, []))
 
+    def test_preload_flat_encryption_metadata_survives_and_low_quality_is_excluded(self):
+        hd = {"definition": "720p", "codec_type": "hevc", "vwidth": 1280, "vheight": 720,
+              "size": 500, "main_url": "https://media.test/720", "encrypt": 1,
+              "spade_a": "fixture-key", "backup_url_1": "https://mirror.test/720"}
+        low = {**hd, "definition": "360p", "size": 900, "vwidth": 640, "vheight": 360}
+        mislabeled = {**low, "definition": "1080p", "codec_type": "hevc"}
+        provider = self.provider([{"code": 0, "data": {"123": {"video_model":
+            json.dumps({"video_list": {"video_1": low, "video_2": hd, "video_3": mislabeled}})}}}])
+        tracks = provider.get_video_tracks(["123"])["123"]
+        self.assertEqual(len(tracks), 1)
+        from media_source import MediaSource
+        selected = MediaSource._best(tracks)
+        self.assertEqual(selected["definition"], "720p")
+        self.assertTrue(selected["encrypt"])
+        self.assertEqual(selected["spade_a"], "fixture-key")
+        self.assertEqual(selected["urls"], [hd["main_url"], hd["backup_url_1"]])
+
+    def test_low_quality_only_is_error_without_old_source_or_downgrade(self):
+        provider = self.provider([{"code": 0, "data": {"123": {"video_model": {
+            "video_list": [{"definition": "360p", "main_url": "https://media.test/low"}]}}}}])
+        with self.assertRaisesRegex(HongguoSourceError, "没有可用的720p/1080p"):
+            provider.get_video_tracks(["123"])
+        self.assertEqual(len(provider.session.calls), 1)
+        self.assertEqual(provider.legacy.calls, [])
+
     def test_accepts_encoded_or_backup_media_address(self):
         address = "https://media.test/encoded"
-        tracks = [{"main_url": base64.b64encode(address.encode()).decode()},
-                  {"backup_url": "https://media.test/backup"}]
-        provider = self.provider([{"Code": 0, "data": {"video_model": {"video_list": tracks}}}])
+        tracks = [{"main_url": base64.b64encode(address.encode()).decode(), "definition": "720p", "codec_type": "hevc", "vwidth": 1280, "vheight": 720},
+                  {"backup_url": "https://media.test/backup", "definition": "720p", "codec_type": "hevc", "vwidth": 1280, "vheight": 720}]
+        provider = self.provider([{"Code": 0, "data": {"123": {"video_model": {"video_list": tracks}}}}])
         result = provider.get_video_tracks(["123"])["123"]
         self.assertEqual([item["main_url"] for item in result],
                          [address, "https://media.test/backup"])

@@ -90,6 +90,20 @@ class SearchPageTests(unittest.TestCase):
         self.assertEqual(self.page()[0], result)
         self.assertEqual(len(self.source.calls), 1)
 
+    def test_website_only_never_probes_legacy_even_for_new_queries(self):
+        fallback = Fallback([{'series_id': '123', 'title': '官网真实结果'}])
+        self.search = SearchPages(self.source, self.cache, fallback, website_only=True)
+        self.page('新剧一'); self.page('新剧二'); self.page('新剧一')
+        self.assertEqual(self.source.calls, [])
+        self.assertEqual(fallback.calls, ['新剧一', '新剧二'])
+
+    def test_website_failure_does_not_switch_back_to_legacy(self):
+        fallback = Fallback([])
+        fallback.search = lambda query: (_ for _ in ()).throw(ValueError('website offline'))
+        self.search = SearchPages(self.source, self.cache, fallback, website_only=True)
+        with self.assertRaises(HTTPException): self.page('新剧')
+        self.assertEqual(self.source.calls, [])
+
     def test_first_page_uses_bounded_fallback_when_legacy_search_fails(self):
         self.source.replies = [ValueError('empty legacy response')]
         fallback = Fallback([{'series_id': '6906763079292292104', 'title': '尸帝'},

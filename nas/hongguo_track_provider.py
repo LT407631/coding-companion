@@ -1,15 +1,15 @@
-"""Current Hongguo single-video API with legacy descriptors and CDN mirror fallback."""
+"""One fixed HD video API; failed legacy APIs are never retried as fallbacks."""
 import base64
-import hashlib
 import json
 import os
-import random
+from pathlib import Path
+import subprocess
 import threading
 import time
-from urllib.parse import urlencode
 from urllib.parse import urlparse
+from source_requests import SourceUnavailable
 
-class HongguoSourceError(RuntimeError):
+class HongguoSourceError(SourceUnavailable):
     pass
 
 
@@ -47,20 +47,15 @@ def download_with_fallback(urls, path, request, timeout=(3, 20)):
 
 class HongguoTrackProvider:
     BASE_URL = "https://api5-normal-sinfonlineb.fqnovel.com"
-    USER_AGENT = ("com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; "
-                  "Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 "
-                  "2026-01-23 QuicVersion:c67e9834 2025-09-08)")
-    SIGN_KEY = bytes((0x44, 0xb9, 0xb9, 0xd9, 0xa4, 0xae, 0xf9, 0xfc, 0xa4, 0x93,
-                      0xaa, 0x75, 0x7c, 0xa3, 0xc2, 0xc4, 0xa4, 0x96, 0x93, 0x8f))
+    MODEL_URL = BASE_URL + '/novel/player/multi_video_model/v1/'
 
-    def __init__(self, legacy, session=None, min_interval=.25):
+    def __init__(self, legacy, session=None, min_interval=.25, signer=None):
         self.legacy = legacy
         if session is None:
             import requests
             session = requests.Session()
         self.session = session
-        self.device_id = str(random.SystemRandom().randrange(10**18, 9 * 10**18))
-        self.install_id = str(random.SystemRandom().randrange(10**18, 9 * 10**18))
+        self.signer = signer or self._sign_request
         self.min_interval = max(0, float(min_interval))
         self._request_lock = threading.Lock()
         self._last_request = 0.0
@@ -69,36 +64,21 @@ class HongguoTrackProvider:
         return getattr(self.legacy, name)
 
     @staticmethod
-    def _reverse8(value):
-        value = ((value & 0x55) << 1) | ((value >> 1) & 0x55)
-        value = ((value & 0x33) << 2) | ((value >> 2) & 0x33)
-        return ((value << 4) | (value >> 4)) & 0xff
-
-    @classmethod
-    def _signature(cls, raw_query, body, timestamp):
-        payload = bytearray(20)
-        payload[:4] = hashlib.md5(raw_query.encode()).digest()[:4]
-        payload[4:8] = hashlib.md5(body).digest()[:4]
-        payload[12:16] = bytes((0, 6, 11, 28))
-        payload[16:20] = int(timestamp).to_bytes(4, "big")
-        for index in range(20):
-            payload[index] ^= cls.SIGN_KEY[index]
-        for index in range(20):
-            rotated = ((payload[index] << 4) | (payload[index] >> 4)) & 0xff
-            payload[index] = cls._reverse8(rotated ^ payload[(index + 1) % 20]) ^ 0xff ^ 20
-        return (bytes((0x84, 0x04, 0x40, 0x1c, 0, 0)) + payload).hex()
-
-    def _query(self, now):
-        return urlencode({
-            "aid": "8662", "app_name": "novelread", "version_code": "73532",
-            "version_name": "7.3.5.32", "manifest_version_code": "73532",
-            "update_version_code": "73532", "channel": "update_64",
-            "device_platform": "android", "os": "android", "ssmix": "a",
-            "device_type": "25053RT47C", "device_brand": "Redmi", "language": "zh",
-            "os_api": "36", "os_version": "16", "resolution": "1280*2772",
-            "dpi": "520", "ac": "wifi", "device_id": self.device_id,
-            "iid": self.install_id, "_rticket": str(int(now * 1000)),
-        })
+    def _sign_request(video_id):
+        tool = Path(__file__).parent / 'vendor/hongguo-sign/sign.cjs'
+        try:
+            process = subprocess.run(['/usr/local/bin/hongguo-node', '--max-old-space-size=64', str(tool)],
+                                     input=json.dumps({'video_id': video_id}), capture_output=True,
+                                     text=True, timeout=3, env={'LANG': 'C.UTF-8'})
+            if process.returncode or len(process.stdout) > 65536:
+                raise ValueError('invalid signer result')
+            signed = json.loads(process.stdout)
+            parsed = urlparse(signed['url'])
+            if parsed.scheme != 'https' or parsed.netloc != 'api5-normal-sinfonlineb.fqnovel.com' or parsed.path != '/novel/player/multi_video_model/v1/':
+                raise ValueError('invalid signing target')
+            return signed
+        except Exception as exc:
+            raise HongguoSourceError('本地高清签名暂不可用；未切换旧接口或低清源') from exc
 
     @staticmethod
     def _media_urls(track):
@@ -126,32 +106,26 @@ class HongguoTrackProvider:
         return output
 
     def _tracks(self, video_id):
-        body = json.dumps({"video_id": video_id, "content_type": 1, "biz_param": {
-            "need_all_video_definition": True, "video_platform": 3,
-        }}, ensure_ascii=False, separators=(",", ":")).encode()
         with self._request_lock:
             delay = self.min_interval - (time.monotonic() - self._last_request)
             if delay > 0:
                 time.sleep(delay)
-            now = time.time()
-            query = self._query(now)
-            headers = {
-                "User-Agent": self.USER_AGENT, "Accept": "application/json",
-                "X-XS-From-Web": "0", "Sdk-Version": "2",
-                "Content-Type": "application/json; charset=utf-8",
-                "X-SS-STUB": hashlib.md5(body).hexdigest().upper(),
-                "X-Khronos": str(int(now)), "X-Gorgon": self._signature(query, body, now),
-                "X-SS-Req-Ticket": str(int(now * 1000)),
-            }
+            signed = self.signer(video_id)
             response = None
             try:
                 response = self.session.post(
-                    self.BASE_URL + "/novel/player/video_model/v1/?" + query,
-                    data=body, headers=headers, timeout=(3, 12))
+                    signed['url'], data=signed['body'].encode(),
+                    headers=signed['headers'], timeout=(3, 12))
                 response.raise_for_status()
+                if not response.content:
+                    raise HongguoSourceError('高清取流接口返回空响应；未回退旧接口或低清源，请稍后重试')
                 result = response.json()
+                if not isinstance(result, dict):
+                    raise ValueError('invalid model response')
+            except HongguoSourceError:
+                raise
             except Exception as exc:
-                raise HongguoSourceError("新版播放源响应失败") from exc
+                raise HongguoSourceError("高清取流接口响应失败；未回退旧接口或低清源，请稍后重试") from exc
             finally:
                 if response is not None:
                     response.close()
@@ -160,12 +134,15 @@ class HongguoTrackProvider:
         if code not in (None, 0, "0"):
             raise HongguoSourceError(f"新版播放源暂时不可用（{str(code)[:20]}）")
         data = result.get("data") or {}
-        model = data.get("video_model") or {}
+        entry = data.get(video_id) if isinstance(data, dict) else None
+        model = entry.get("video_model") if isinstance(entry, dict) else None
         if isinstance(model, str):
             try:
                 model = json.loads(model)
             except ValueError as exc:
                 raise HongguoSourceError("新版播放源数据格式异常") from exc
+        if not isinstance(model, dict):
+            raise HongguoSourceError("固定播放源未提供有效的视频模型")
         tracks = model.get("video_list") or []
         if isinstance(tracks, dict):
             tracks = [tracks[key] for key in sorted(tracks)]
@@ -173,11 +150,31 @@ class HongguoTrackProvider:
         for track in tracks if isinstance(tracks, list) else []:
             if not isinstance(track, dict):
                 continue
+            meta = track.get("video_meta") or track
+            if str(meta.get("definition", "")).lower() not in ("720p", "1080p"):
+                continue
+            if str(meta.get('codec_type', '')).lower() not in ('h264', 'avc', 'avc1', 'h265', 'hevc', 'hvc1', 'hev1', 'bytevc1'):
+                continue
+            try:
+                dimensions = [int(meta.get(name) or 0) for name in ("vwidth", "vheight")]
+            except (ValueError, TypeError):
+                continue
+            if not all(dimensions) or min(dimensions) < 720:
+                continue
+            definition = '1080p' if min(dimensions) >= 1080 else '720p'
             addresses = self._media_urls(track)
             if addresses:
                 normalized.append({**track, "main_url": addresses[0],
-                                   "coding_urls": addresses})
-        return normalized
+                                   "coding_urls": addresses,
+                                   "video_meta": {**{name: meta.get(name) for name in
+                                                  ("size", "codec_type", "vwidth", "vheight")},
+                                                  "definition": definition},
+                                   "encrypt_info": track.get("encrypt_info") or {
+                                       "encrypt": bool(track.get("encrypt")), "spade_a": track.get("spade_a")}})
+        if not normalized:
+            raise HongguoSourceError("当前固定播放源没有可用的720p/1080p轨道；未切换旧接口或低清源")
+        best = max(int(t['video_meta']['definition'][:-1]) for t in normalized)
+        return [t for t in normalized if int(t['video_meta']['definition'][:-1]) == best]
 
     def get_video_tracks(self, vids, force=False):
         output, failures = {}, {}
@@ -190,11 +187,6 @@ class HongguoTrackProvider:
                     failures[value] = HongguoSourceError("新版播放源未返回视频轨道")
             except Exception as exc:
                 failures[value] = exc
-        if failures:
-            try:
-                output.update(self.legacy.get_video_tracks(list(failures), force=force) or {})
-            except Exception:
-                pass
         unresolved = [value for value in failures if not output.get(value)]
         if unresolved and len(vids) == 1:
             raise failures[unresolved[0]]
