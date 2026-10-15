@@ -142,7 +142,7 @@ final class TclHardwarePlayer extends MediaPlayer {
     private void video(){
         MediaCodec codec=null;MediaExtractor extractor=videoInput;
         try{
-            codec=HardwareVideoCodec.open(component,videoFormat,surface);openedComponent=codec.getName();
+            codec=HardwareVideoCodec.open(component,videoFormat,surface,this::note);openedComponent=codec.getName();
             note("decoder-open,name="+openedComponent+",classification="+(android.os.Build.VERSION.SDK_INT>=29?"platform-hardware":"vendor-allowlist")+",width="+width+",height="+height);
             MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int epoch=-1;boolean eos=false,seekReported=false;
             while(!closed){
