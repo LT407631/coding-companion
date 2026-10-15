@@ -61,7 +61,7 @@ final class TvPlaybackDiagnostics {
         web.evaluateJavascript("window.CodingTVDiagnostics && CodingTVDiagnostics.enable("+info+")",null);
     }
     String tag(String url,String route){return enabled?url+"&tv_diag_route="+route:url;}
-    void transport(String url,String note){activity.runOnUiThread(()->{if(!closed&&url.replaceAll("&tv_diag_route=(system|browser)","").equals(source))record("native-range",note);});}
+    void transport(String url,String note){activity.runOnUiThread(()->{if(!closed&&url.replaceAll("&tv_diag_route=(system|browser)","").equals(source))record(note.startsWith("decoder-")?"system-open":"native-range",note);});}
     void record(String event,String note){
         if(!enabled||closed||reports>=48)return;
         reports++;
@@ -77,6 +77,7 @@ final class TvPlaybackDiagnostics {
         try{if(Build.VERSION.SDK_INT>=26){PersistableBundle m=player.getMetrics();if(m!=null){
             String selected=m.getString(MediaPlayer.MetricsConstants.CODEC_VIDEO);
             note+=",codec="+selected+",hardware="+hardware(selected);
+            if(m.containsKey("coding.video.engine"))note+=",engine="+m.getString("coding.video.engine");
             if(m.containsKey("coding.video.pts"))note+=",avDeltaMs="+(m.getLong("coding.video.pts")-position);
             // OEMs may omit either counter. Missing is never reported as zero drops.
             Object count=m.get(MediaPlayer.MetricsConstants.FRAMES),dropped=m.get(MediaPlayer.MetricsConstants.FRAMES_DROPPED);

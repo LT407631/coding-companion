@@ -45,6 +45,7 @@ final class TclMediaSource {
                 }catch(IOException|RejectedExecutionException ignored){if(client!=null){clients.remove(client);try{client.close();}catch(IOException e){}}}}
             },"tcl-http-listen");listener.setDaemon(true);listener.start();
         }
+        void ticket(String value){mediaTicket=value;}
         String address(){return "http://127.0.0.1:"+server.getLocalPort()+path;}
         private void note(String text){if(!closed&&report!=null&&(text.startsWith("status=")?statusReported.compareAndSet(false,true):errors.getAndIncrement()<2))report.status("transport=local-http,"+text);}
         private static String line(InputStream input,int[] budget)throws IOException{
@@ -98,14 +99,14 @@ final class TclMediaSource {
         return TvCompatibility.applies(Build.MODEL)||maker.equals("xiaomi")||maker.equals("redmi")||model.startsWith("mitv")||model.startsWith("redmi");
     }
     static boolean ticketTransport(){return localTransport()&&!TvCompatibility.applies(Build.MODEL);}
-    static void ticket(MediaPlayer player,String value){if(player instanceof Player&&((Player)player).input!=null)((Player)player).input.mediaTicket=value;}
+    static void ticket(MediaPlayer player,String value){if(player instanceof TclHardwarePlayer)((TclHardwarePlayer)player).ticket(value);else if(player instanceof Player&&((Player)player).input!=null)((Player)player).input.ticket(value);}
     static MediaPlayer create(){return localTransport()?new Player():new MediaPlayer();}
     static MediaPlayer createHardware(){
-        if(!TvCompatibility.applies(Build.MODEL)||Build.VERSION.SDK_INT<29)throw new IllegalStateException("TCL hardware route unavailable");
+        if(!(TvCompatibility.applies(Build.MODEL)&&Build.VERSION.SDK_INT>=29)&&!RedmiPlayback.applies())throw new IllegalStateException("TCL hardware route unavailable");
         return new TclHardwarePlayer();
     }
     static void set(MediaPlayer player,Activity activity,String url,Map<String,String> headers,Report report)throws IOException{
-        if(TvCompatibility.applies(Build.MODEL)&&player instanceof TclHardwarePlayer)((TclHardwarePlayer)player).source(url,headers,report);
+        if(player instanceof TclHardwarePlayer)((TclHardwarePlayer)player).source(url,headers,report);
         else if(player instanceof Player)((Player)player).source(activity,url,headers,report);
         else player.setDataSource(activity,Uri.parse(url),headers);
     }

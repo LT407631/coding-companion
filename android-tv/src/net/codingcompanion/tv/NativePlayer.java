@@ -165,7 +165,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         }
         rendered=false;playbackStartedAt=0;diagnostics.resetFrames(true);
         try{
-            final MediaPlayer p=standby==null?(TvCompatibility.applies(Build.MODEL)?TclMediaSource.createHardware():TclMediaSource.create()):standby;media=p;
+            final MediaPlayer p=standby==null?((TvCompatibility.applies(Build.MODEL)||RedmiPlayback.applies())?TclMediaSource.createHardware():TclMediaSource.create()):standby;media=p;
             prepareDeadline=SystemClock.elapsedRealtime()+20000;
             p.setSurface(surface);
             p.setOnVideoSizeChangedListener((m,w,h)->{if(media==m){videoW=w;videoH=h;fit();}});

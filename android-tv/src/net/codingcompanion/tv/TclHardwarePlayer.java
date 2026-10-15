@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 
-/** TCL-only platform codecs: one hardware video decoder and a small PCM audio sink. */
+/** Scoped platform codecs: one hardware video decoder and a small PCM audio sink. */
 final class TclHardwarePlayer extends MediaPlayer {
     private final Handler callbacks=new Handler(Looper.getMainLooper());
     private volatile boolean closed, ready, playing, launched, videoDone, audioDone;
@@ -34,6 +34,7 @@ final class TclHardwarePlayer extends MediaPlayer {
     private MediaExtractor videoInput, audioInput;
     private MediaFormat videoFormat, audioFormat;
     private String component="";
+    private TclMediaSource.Report report;
     private volatile String openedComponent="";
     private OnPreparedListener preparedListener;
     private OnCompletionListener completionListener;
@@ -44,8 +45,11 @@ final class TclHardwarePlayer extends MediaPlayer {
 
     void source(String url,Map<String,String> headers,TclMediaSource.Report report)throws IOException{
         if(input!=null)throw new IOException("Source already assigned");
-        input=new TclMediaSource.Input(url,headers.get("Cookie"),report);
+        this.report=report;
+        input=new TclMediaSource.Input(url,headers.get("Cookie"),headers.get("X-Coding-Media"),report);
     }
+    void ticket(String value){TclMediaSource.Input current=input;if(current!=null)current.ticket(value);}
+    private void note(String text){if(!closed&&report!=null)report.status(text);}
     @Override public void setSurface(Surface value){surface=value;}
     @Override public void setOnPreparedListener(OnPreparedListener value){preparedListener=value;}
     @Override public void setOnCompletionListener(OnCompletionListener value){completionListener=value;}
@@ -78,7 +82,7 @@ final class TclHardwarePlayer extends MediaPlayer {
                 }
                 synchronized(this){if(closed)return;videoInput=v;audioInput=a;v=null;a=null;ready=true;}
                 post(()->{if(sizeListener!=null)sizeListener.onVideoSizeChanged(this,width,height);if(preparedListener!=null)preparedListener.onPrepared(this);});
-            }catch(Exception e){error();}
+            }catch(Exception e){note("decoder-prepare-error,type="+e.getClass().getSimpleName());error();}
             finally{if(v!=null)v.release();if(a!=null)a.release();}
         },"tcl-hardware-prepare").start();
     }
@@ -139,6 +143,7 @@ final class TclHardwarePlayer extends MediaPlayer {
         MediaCodec codec=null;MediaExtractor extractor=videoInput;
         try{
             codec=HardwareVideoCodec.open(component,videoFormat,surface);openedComponent=codec.getName();
+            note("decoder-open,name="+openedComponent+",classification="+(android.os.Build.VERSION.SDK_INT>=29?"platform-hardware":"vendor-allowlist")+",width="+width+",height="+height);
             MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int epoch=-1;boolean eos=false,seekReported=false;
             while(!closed){
                 if(!awaitPlaying())break;
@@ -160,7 +165,7 @@ final class TclHardwarePlayer extends MediaPlayer {
                     while(!closed&&epoch==generation)Thread.sleep(10);
                 }
             }
-        }catch(Exception e){if(!closed)error();}
+        }catch(Exception e){if(!closed){note("decoder-error,type="+e.getClass().getSimpleName());error();}}
         finally{if(codec!=null)codec.release();extractor.release();}
     }
     private AudioTrack sink(MediaFormat format){
@@ -214,7 +219,7 @@ final class TclHardwarePlayer extends MediaPlayer {
                     while(!closed&&epoch==generation)Thread.sleep(10);
                 }
             }
-        }catch(Exception e){if(!closed)error();}
+        }catch(Exception e){if(!closed){note("decoder-audio-error,type="+e.getClass().getSimpleName()+(e instanceof MediaCodec.CodecException?",code="+((MediaCodec.CodecException)e).getDiagnosticInfo():""));error();}}
         finally{audio=null;if(track!=null)track.release();if(codec!=null)codec.release();extractor.release();}
     }
     private synchronized void completeIfEnded(){
@@ -223,6 +228,7 @@ final class TclHardwarePlayer extends MediaPlayer {
     @Override public PersistableBundle getMetrics(){
         PersistableBundle metrics=new PersistableBundle();
         if(!openedComponent.isEmpty())metrics.putString(MetricsConstants.CODEC_VIDEO,openedComponent);
+        metrics.putString("coding.video.engine","named-platform");
         metrics.putLong("coding.video.pts",videoPts);
         metrics.putLong(MetricsConstants.FRAMES,frames);metrics.putLong(MetricsConstants.FRAMES_DROPPED,dropped);return metrics;
     }
