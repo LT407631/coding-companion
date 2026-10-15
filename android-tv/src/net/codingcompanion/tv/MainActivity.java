@@ -44,6 +44,14 @@ public final class MainActivity extends Activity {
     private long exitAt;
     private NativePlayer nativePlayer;
     private TvUpdater updater;
+    private boolean foreground;
+    private final Runnable updateTick=new Runnable() {
+        @Override public void run() {
+            if(!foreground||web==null)return;
+            updater.autoCheck(site);
+            web.postDelayed(this,30000);
+        }
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -98,11 +106,11 @@ public final class MainActivity extends Activity {
                 float scale=view.getWidth()/getResources().getDisplayMetrics().density/width;
                 view.evaluateJavascript("(function(){var m=document.querySelector('meta[name=viewport]');if(m)m.content='width="+width+",initial-scale="+scale+"';})();\n"+"window.CodingTVConnection={wan:"+JSONObject.quote(savedSites()[1])+"};\n"+adapter, null);
                 CookieManager.getInstance().flush();
+                updater.autoCheck(site);
                 nativePlayer.installDiagnostics();
                 view.postDelayed(() -> view.evaluateJavascript("typeof W!=='undefined'", value -> {
                     if (!url.equals(view.getUrl()) || !allowed(view.getUrl())) return;
-                    if ("true".equals(value)) updater.autoCheck(site);
-                    else if ("false".equals(value) && errorView==null) showError("服务器已连接，但当前电视浏览器仍无法运行页面。请升级系统 WebView 或安装更新后的 APK。");
+                    if ("false".equals(value) && errorView==null) showError("服务器已连接，但当前电视浏览器仍无法运行页面。请升级系统 WebView 或安装更新后的 APK。");
                 }), 1200);
             }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
@@ -240,10 +248,11 @@ public final class MainActivity extends Activity {
         });
     }
     @Override protected void onPause() {
+        foreground=false;if(web!=null)web.removeCallbacks(updateTick);
         if(web!=null) {web.evaluateJavascript("window.CodingTV && CodingTV.suspend()",null);web.onPause();CookieManager.getInstance().flush();
                 nativePlayer.installDiagnostics();}
         if(nativePlayer!=null)nativePlayer.suspend();super.onPause();
     }
-    @Override protected void onResume() {super.onResume();if(web!=null) web.onResume();if(nativePlayer!=null)nativePlayer.resume();if(updater!=null)updater.resume();immersive();}
+    @Override protected void onResume() {super.onResume();foreground=true;if(web!=null){web.removeCallbacks(updateTick);web.postDelayed(updateTick,1500);}if(web!=null) web.onResume();if(nativePlayer!=null)nativePlayer.resume();if(updater!=null)updater.resume();immersive();}
     @Override protected void onDestroy() {if(updater!=null)updater.destroy();if(nativePlayer!=null)nativePlayer.destroy();if(web!=null) {closeFullscreen();root.removeView(web);web.destroy();}super.onDestroy();}
 }

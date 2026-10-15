@@ -35,17 +35,24 @@ final class TvUpdater {
     private JSONObject ready;
     private File apk;
     private boolean waitingForPermission;
-    private boolean startupChecked, autoChecking, destroyed;
+    private boolean autoChecking, destroyed;
+    private String activeSite, checkedSite;
+    private long nextCheckAt;
     private String manualAfterCheck;
     TvUpdater(Activity activity) {this.activity=activity;}
     void autoCheck(String site) {
-        if(startupChecked||destroyed)return;
-        startupChecked=true;
-        if(dialog!=null||(worker!=null&&worker.isAlive()))return;
+        if(destroyed)return;
+        activeSite=site;
+        if(dialog!=null&&dialog.isShowing()||(worker!=null&&worker.isAlive())||autoChecking)return;
+        if(site.equals(checkedSite)&&System.currentTimeMillis()<nextCheckAt)return;
+        String currentCookie=CookieManager.getInstance().getCookie(site+"/updates/android-tv/latest");
+        if(currentCookie==null||currentCookie.isEmpty())return;
+        checkedSite=site;nextCheckAt=System.currentTimeMillis()+30000;
         cancelled=false;autoChecking=true;
-        String cookie=CookieManager.getInstance().getCookie(site+"/updates/android-tv/latest");
+        String cookie=currentCookie;
         worker=new Thread(()->{
             JSONObject found=null;
+            boolean succeeded=false;
             try {
                 JSONObject release=readRelease(site,cookie);
                 PackageInfo installed=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0);
@@ -55,11 +62,14 @@ final class TvUpdater {
                     if(release.getString("version_name").length()>64||release.optString("notes","").length()>2000)throw new Exception("更新信息无效");
                     found=release;
                 }
+                succeeded=true;
             } catch(Exception ignored) { /* Startup network/auth failures do not interrupt watching. */ }
             final JSONObject release=found;
+            final boolean success=succeeded;
             activity.runOnUiThread(()->{
                 autoChecking=false;worker=null;
-                if(destroyed||activity.isFinishing())return;
+                if(destroyed||activity.isFinishing()||!site.equals(activeSite))return;
+                if(success)nextCheckAt=System.currentTimeMillis()+6*60*60*1000L;
                 String manual=manualAfterCheck;manualAfterCheck=null;
                 if(manual!=null){show(manual);return;}
                 if(release==null||cancelled||dialog!=null)return;
