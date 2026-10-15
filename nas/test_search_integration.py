@@ -88,3 +88,14 @@ class NasIntegrationTests(unittest.TestCase):
         for path in ('/search/page?q=', '/search/page?q=x&cursor=evil', '/search/page?q=x%00y'):
             self.assertIn(self.request(path, cookie=self.cookie)[0], (400, 422))
         self.assertEqual(self.calls, [])
+
+    def test_seasons_use_bounded_source_and_existing_web_fallback(self):
+        cache = self.module.season_cache
+        self.assertIsInstance(cache.fallback, self.module.HongguoWebSearch)
+        data = {'items': [{'series_id': '1', 'season': 1}], 'partial': True}
+        with patch.object(cache, 'get', return_value=data) as lookup:
+            self.assertEqual(self.request('/seasons?series_id=1')[0], 401)
+            status, _, body = self.request('/seasons?series_id=1', cookie=self.cookie)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body), data)
+            lookup.assert_called_once_with(self.module.source, '1', refresh=False, search_hint='')

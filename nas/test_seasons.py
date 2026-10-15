@@ -41,6 +41,44 @@ def row(sid, title):
 
 
 class SeasonsTests(unittest.TestCase):
+    def test_empty_legacy_body_uses_fallback_and_verifies_album(self):
+        h = FakePlatform({'1': video('黑蛋第一季', 1),
+                          '2': video('黑蛋第二季', 2),
+                          '3': video('黑蛋第二季', 2, 'another')}, {})
+        original = h.api
+        def api(method, *args, **kwargs):
+            if method == 'GET':
+                raise ValueError('Expecting value: empty response')
+            return original(method, *args, **kwargs)
+        h.api = api
+        fallback = SimpleNamespace(search=lambda query: [row('2', '黑蛋第二季'), row('3', '黑蛋第二季')])
+        result = get_seasons(h, '1', fallback=fallback)
+        self.assertEqual([item['series_id'] for item in result['items']], ['1', '2'])
+        self.assertTrue(result['partial'], 'Suggestion results cannot prove all seasons were found')
+
+    def test_empty_or_invalid_legacy_page_uses_fallback(self):
+        for payload in ({'search_tabs': []}, {'code': 110001}, {'search_tabs': [{'data': None}]}):
+            with self.subTest(payload=payload):
+                h = FakePlatform({'1': video('故事第一季', 1), '2': video('故事第二季', 2)}, {})
+                api = h.api
+                h.api = lambda method, *args, **kw: payload if method == 'GET' else api(method, *args, **kw)
+                calls = []
+                def search(query):
+                    calls.append(query)
+                    return [row('2', '故事第二季')]
+                result = get_seasons(h, '1', search_hint='原著', fallback=SimpleNamespace(search=search))
+                self.assertEqual([item['season'] for item in result['items']], [1, 2])
+                self.assertEqual(calls, ['原著'])
+
+    def test_later_page_failure_keeps_verified_candidates_and_uses_fallback(self):
+        h = FakePlatform({'1': video('故事第一季', 1), '2': video('故事第二季', 2),
+                          '3': video('故事第三季', 3)},
+                         {0: {'data': [row('2', '故事第二季')], 'has_more': True, 'next_offset': 1}})
+        fallback = SimpleNamespace(search=lambda query: [row('3', '故事第三季')])
+        result = get_seasons(h, '1', fallback=fallback)
+        self.assertEqual([item['season'] for item in result['items']], [1, 2, 3])
+        self.assertTrue(result['partial'])
+
     def test_plain_title_search_accepts_punctuation_variants(self):
         h = FakePlatform({"1": video("长生狱主，一念镇九幽", 1),
                           "2": video("长生狱主一念镇九幽第二季", 2)},
@@ -208,6 +246,70 @@ class DiskCacheTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_slow_cold_series_does_not_block_another_series(self):
+        cache = SeasonCache(self.path)
+        started, release, other_done = threading.Event(), threading.Event(), threading.Event()
+        results = []
+        def lookup(h, sid, **kwargs):
+            if sid == '1':
+                started.set()
+                release.wait(2)
+                return self.data
+            return {'items': [{'series_id': sid, 'season': 1}], 'album_id': sid}
+        with patch('seasons.get_seasons', side_effect=lookup) as fetch:
+            first = threading.Thread(target=lambda: results.append(cache.get(None, '1')))
+            duplicate = threading.Thread(target=lambda: results.append(cache.get(None, '1')))
+            def other():
+                results.append(cache.get(None, '71'))
+                other_done.set()
+            second = threading.Thread(target=other)
+            try:
+                first.start(); self.assertTrue(started.wait(1))
+                duplicate.start(); second.start()
+                self.assertTrue(other_done.wait(.5), 'A different cold series is stuck behind the old lookup')
+            finally:
+                release.set()
+                for worker in (first, duplicate, second):
+                    if worker.ident is not None: worker.join(3)
+            self.assertEqual(fetch.call_count, 2, 'Same-series requests must still share one lookup')
+        self.assertEqual(len(results), 3)
+
+    def test_cleared_cold_lookup_cannot_restore_old_cache(self):
+        cache = SeasonCache(self.path)
+        def lookup(*args, **kwargs):
+            cache.clear()
+            return self.data
+        with patch('seasons.get_seasons', side_effect=lookup):
+            self.assertEqual(cache.get(None, '1')['items'], self.data['items'])
+        self.assertFalse(self.path.exists())
+        self.assertFalse(cache._miss_jobs)
+        self.assertFalse(cache._groups)
+
+    def test_fallback_result_is_persisted_and_reused_across_seasons(self):
+        h = FakePlatform({'1': video('故事第一季', 1), '2': video('故事第二季', 2)}, {})
+        original = h.api
+        def api(method, *args, **kwargs):
+            if method == 'GET': raise ValueError('empty body')
+            return original(method, *args, **kwargs)
+        h.api = api
+        fallback = SimpleNamespace(search=lambda query: [row('2', '故事第二季')])
+        first = SeasonCache(self.path, fallback=fallback).get(h, '1')
+        self.assertTrue(first['partial'])
+        self.assertFalse(first['cached'])
+        with patch('seasons.get_seasons', side_effect=AssertionError('Must reuse persisted album')):
+            second = SeasonCache(self.path, fallback=fallback).get(h, '2')
+        self.assertEqual(second['items'], first['items'])
+        self.assertTrue(second['cached'])
+
+    def test_failed_cold_lookup_releases_dedup_entry_for_retry(self):
+        cache = SeasonCache(self.path)
+        with patch('seasons.get_seasons', side_effect=ValueError('both sources unavailable')):
+            with self.assertRaises(ValueError): cache.get(None, '1')
+        self.assertFalse(cache._miss_jobs)
+        with patch('seasons.get_seasons', return_value=self.data):
+            self.assertEqual(cache.get(None, '1')['items'], self.data['items'])
+
 
     def test_old_dangling_member_does_not_show_another_current_season(self):
         cache = SeasonCache(self.path)

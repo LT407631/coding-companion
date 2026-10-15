@@ -8,16 +8,24 @@ import threading
 import time
 
 
-SCAN_VERSION = 3
+SCAN_VERSION = 4
 MAX_CANDIDATES = 120
+
+
+class _Lookup:
+    def __init__(self):
+        self.done = threading.Event()
+        self.result = None
+        self.error = None
 
 
 class SeasonCache:
     """Persist album lists; serve stale data while a single worker refreshes it."""
-    def __init__(self, path, ttl=86400):
+    def __init__(self, path, ttl=86400, fallback=None):
         self.path, self.ttl = Path(path), ttl
+        self.fallback = fallback
         self._lock = threading.RLock()
-        self._miss_lock = threading.Lock()
+        self._miss_jobs = {}
         self._jobs, self._retry_after = {}, {}
         self._generation = 0
         try:
@@ -79,7 +87,7 @@ class SeasonCache:
 
     def _refresh(self, h, sid, key, generation, search_hint=""):
         try:
-            self.put(sid, get_seasons(h, sid, refresh=True, search_hint=search_hint), generation, search_hint)
+            self.put(sid, self._lookup(h, sid, True, search_hint), generation, search_hint)
             with self._lock:
                 if generation == self._generation:
                     self._retry_after.pop(key, None)
@@ -92,20 +100,47 @@ class SeasonCache:
                 if self._jobs.get(key) == generation:
                     self._jobs.pop(key, None)
 
+    def _lookup(self, h, sid, refresh, search_hint):
+        options = {"refresh": refresh, "search_hint": search_hint}
+        if self.fallback is not None:
+            options["fallback"] = self.fallback
+        return get_seasons(h, sid, **options)
+
     def get(self, h, sid, refresh=False, search_hint=""):
         result = self._cached(h, sid, refresh, search_hint)
         if result is not None:
             return result
-        # Deduplicate initial requests and re-check after another request fills the album.
-        with self._miss_lock:
+        # Deduplicate only the same series. A slow abandoned detail must not
+        # serialize every subsequent, unrelated cold lookup behind it.
+        with self._lock:
+            generation = self._generation
+            key = (generation, sid)
+            flight = self._miss_jobs.get(key)
+            owner = flight is None
+            if owner:
+                flight = self._miss_jobs[key] = _Lookup()
+        if not owner:
+            if not flight.done.wait(55):
+                raise TimeoutError("等待季列表超时，请稍后重试")
+            if flight.error is not None:
+                raise flight.error
+            return {**flight.result, "cached": True}
+        try:
             result = self._cached(h, sid, refresh, search_hint)
             if result is not None:
+                flight.result = result
                 return result
-            with self._lock:
-                generation = self._generation
-            data = get_seasons(h, sid, refresh=refresh, search_hint=search_hint)
+            data = self._lookup(h, sid, refresh, search_hint)
             data = self.put(sid, data, generation, search_hint) or data
-            return {**data, "cached": False, "refreshing": False, "refresh_error": False}
+            flight.result = {**data, "cached": False, "refreshing": False, "refresh_error": False}
+            return flight.result
+        except Exception as exc:
+            flight.error = exc
+            raise
+        finally:
+            with self._lock:
+                self._miss_jobs.pop(key, None)
+                flight.done.set()
 
     def clear(self):
         with self._lock:
@@ -114,6 +149,7 @@ class SeasonCache:
             self._series.clear()
             self._jobs.clear()
             self._retry_after.clear()
+            self._miss_jobs.clear()
             self.path.unlink(missing_ok=True)
 
 
@@ -147,14 +183,14 @@ def _item(sid, video):
             "episode_cnt": video.get("episode_cnt") or 0}
 
 
-def get_seasons(h, sid, refresh=False, search_hint=""):
+def get_seasons(h, sid, refresh=False, search_hint="", fallback=None):
     current = _detail(h, [sid]).get(sid)
     if not current:
         raise ValueError("剧集不存在")
     album = str(current.get("related_album_id") or "")
     if not album:
         return {"items": [_item(sid, current)], "partial": False, "album_id": ""}
-    key = h.SG.cache_key("nas-seasons-v3", album)
+    key = h.SG.cache_key("nas-seasons-v4", album)
     cached = h.SG.cache_get(key)
     if not refresh and cached is not None and (not search_hint or cached.get("lookup_query") == search_hint) and any(str(item["series_id"]) == sid for item in cached["items"]):
         return cached
@@ -178,12 +214,34 @@ def get_seasons(h, sid, refresh=False, search_hint=""):
             query["passback"] = passback
         if search_id:
             query["search_id"] = search_id
-        response = h.api("GET", "/reading/bookapi/search/tab/v", extra_query=query)
-        tabs = response.get("search_tabs") or []
-        if not tabs:
+        try:
+            response = h.api("GET", "/reading/bookapi/search/tab/v", extra_query=query)
+            if not isinstance(response, dict) or response.get("code", 0) not in (0, '0'):
+                raise ValueError("Invalid seasonal search response")
+            tabs = response.get("search_tabs")
+            if tabs == [] and fallback is None:
+                break
+            if not isinstance(tabs, list) or not tabs:
+                raise ValueError("Missing seasonal search tabs")
+            tab = tabs[0]
+            if not isinstance(tab, dict) or not isinstance(tab.get("data"), list):
+                raise ValueError("Invalid seasonal search page")
+            cells = tab['data']
+            if not cells and fallback is not None:
+                raise ValueError("Empty seasonal search page")
+        except Exception:
+            if fallback is None:
+                raise
+            # Suggestions are discovery candidates, never authoritative album
+            # membership. All IDs are still checked against platform metadata.
+            for row in fallback.search(query_title):
+                candidate = str(row.get('series_id') or '')
+                if re.fullmatch(r'\d{1,24}', candidate):
+                    ids.add(candidate)
+                if len(ids) >= MAX_CANDIDATES:
+                    break
+            partial = True
             break
-        tab = tabs[0]
-        cells = tab.get("data") or []
         for cell in cells:
             row = h._parse_search_cell(cell)
             if row and row.get("series_id"):

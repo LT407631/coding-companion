@@ -44,7 +44,7 @@ site_auth = SiteAuth(Path(server.H.OUT_DIR) / ".site_auth.sqlite3")
 install_auth(app, site_auth, Path(__file__).parent / "web" / "login.html")
 install_phone_input(app, Path(__file__).parent / "web")
 install_tv_updates(app, os.environ.get('CODING_TV_UPDATE_DIR', str(Path(server.H.OUT_DIR) / 'tv-updates')))
-season_cache = SeasonCache(Path(server.H.OUT_DIR) / ".season_cache.json")
+season_cache = SeasonCache(Path(server.H.OUT_DIR) / ".season_cache.json", fallback=HongguoWebSearch())
 tv_compat = TvCompatibilityCache(Path(server.H.OUT_DIR) / ".tv_compat")
 
 
@@ -355,7 +355,7 @@ def home():
 def seasons(series_id: str = Query(..., pattern=r"^\d{1,24}$"), refresh: bool = False,
             search_hint: str = Query("", max_length=100)):
     try:
-        return season_cache.get(server.H, series_id, refresh=refresh, search_hint=search_hint)
+        return season_cache.get(source, series_id, refresh=refresh, search_hint=search_hint)
     except Exception as exc:
         raise HTTPException(502, "暂时无法获取全部季，请重试") from exc
 
