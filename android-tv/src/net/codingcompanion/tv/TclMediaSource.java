@@ -28,12 +28,13 @@ final class TclMediaSource {
         private final Set<Socket> clients=Collections.newSetFromMap(new ConcurrentHashMap<Socket,Boolean>());
         private final Set<HttpURLConnection> upstream=Collections.newSetFromMap(new ConcurrentHashMap<HttpURLConnection,Boolean>());
         private final ThreadPoolExecutor workers=new ThreadPoolExecutor(0,2,1,TimeUnit.SECONDS,new SynchronousQueue<Runnable>(),r->{Thread t=new Thread(r,"tcl-http-read");t.setDaemon(true);return t;});
-        private volatile String cookie;
+        private volatile String cookie, mediaTicket;
         private volatile boolean closed;
-        Input(String address,String session,Report report)throws IOException{
+        Input(String address,String session,Report report)throws IOException{this(address,session,null,report);}
+        Input(String address,String session,String ticket,Report report)throws IOException{
             url=new URL(address);
             if(!("http".equals(url.getProtocol())||"https".equals(url.getProtocol()))||url.getUserInfo()!=null||url.getRef()!=null||!"/stream".equals(url.getPath()))throw new IOException("Invalid media address");
-            cookie=session;this.report=report;
+            cookie=session;mediaTicket=ticket;this.report=report;
             byte[] key=new byte[16];new SecureRandom().nextBytes(key);StringBuilder text=new StringBuilder("/");for(byte b:key)text.append(String.format(Locale.ROOT,"%02x",b&255));path=text.toString()+"/video.mp4";
             server=new ServerSocket(0,2,InetAddress.getByName("127.0.0.1"));
             Thread listener=new Thread(()->{
@@ -66,7 +67,7 @@ final class TclMediaSource {
                 if(range!=null){Matcher r=REQUEST_RANGE.matcher(range);if(!r.matches()){response(output,416,"Content-Length: 0\r\n");return;}wanted=Long.parseLong(r.group(1));if(!r.group(2).isEmpty()){end=Long.parseLong(r.group(2));if(end<wanted){response(output,416,"Content-Length: 0\r\n");return;}}}
                 if(closed)return;c=(HttpURLConnection)url.openConnection();upstream.add(c);
                 c.setInstanceFollowRedirects(false);c.setConnectTimeout(5000);c.setReadTimeout(8000);c.setRequestProperty("Accept-Encoding","identity");c.setRequestProperty("User-Agent","CodingCompanionTV/1.0.30");
-                String session=cookie;if(session!=null)c.setRequestProperty("Cookie",session);if(range!=null)c.setRequestProperty("Range",range);
+                String session=cookie,ticket=mediaTicket;if(session!=null)c.setRequestProperty("Cookie",session);if(ticket!=null&&!ticket.isEmpty())c.setRequestProperty("X-Coding-Media",ticket);if(range!=null)c.setRequestProperty("Range",range);
                 if(closed)return;stage="upstream";int status=c.getResponseCode();String type=c.getContentType(),contentRange=c.getHeaderField("Content-Range"),size=c.getHeaderField("Content-Length");
                 note("status="+status+",type="+type+",range="+contentRange);
                 if(status!=200&&status!=206){response(output,status>=300&&status<400?502:status,"Content-Length: 0\r\n");return;}
@@ -80,12 +81,12 @@ final class TclMediaSource {
             }catch(IOException|RuntimeException e){if("upstream".equals(stage))note("upstream-error="+e.getClass().getSimpleName());if(!sent&&!closed)try{response(client.getOutputStream(),502,"Content-Length: 0\r\n");}catch(IOException ignored){}}
             finally{if(c!=null){upstream.remove(c);c.disconnect();}clients.remove(client);try{client.close();}catch(IOException ignored){}}
         }
-        @Override public void close(){closed=true;cookie=null;try{server.close();}catch(IOException ignored){}for(Socket c:clients)try{c.close();}catch(IOException ignored){}for(HttpURLConnection c:upstream)c.disconnect();workers.shutdownNow();}
+        @Override public void close(){closed=true;cookie=null;mediaTicket=null;try{server.close();}catch(IOException ignored){}for(Socket c:clients)try{c.close();}catch(IOException ignored){}for(HttpURLConnection c:upstream)c.disconnect();workers.shutdownNow();}
     }
     private static final class Player extends MediaPlayer {
         private Input input;
         void source(Activity activity,String url,Map<String,String> headers,Report report)throws IOException{
-            if(input!=null)input.close();input=new Input(url,headers.get("Cookie"),report);
+            if(input!=null)input.close();input=new Input(url,headers.get("Cookie"),headers.get("X-Coding-Media"),report);
             try{setDataSource(activity,Uri.parse(input.address()),Collections.<String,String>emptyMap());}catch(IOException|RuntimeException e){input.close();input=null;throw e;}
         }
         @Override public void release(){if(input!=null){input.close();input=null;}super.release();}
@@ -96,6 +97,8 @@ final class TclMediaSource {
         String model=Build.MODEL==null?"":Build.MODEL.toLowerCase(Locale.ROOT);
         return TvCompatibility.applies(Build.MODEL)||maker.equals("xiaomi")||maker.equals("redmi")||model.startsWith("mitv")||model.startsWith("redmi");
     }
+    static boolean ticketTransport(){return localTransport()&&!TvCompatibility.applies(Build.MODEL);}
+    static void ticket(MediaPlayer player,String value){if(player instanceof Player&&((Player)player).input!=null)((Player)player).input.mediaTicket=value;}
     static MediaPlayer create(){return localTransport()?new Player():new MediaPlayer();}
     static MediaPlayer createHardware(){
         if(!TvCompatibility.applies(Build.MODEL)||Build.VERSION.SDK_INT<29)throw new IllegalStateException("TCL hardware route unavailable");

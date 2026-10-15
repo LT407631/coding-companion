@@ -36,7 +36,8 @@ final class TvPlaybackDiagnostics {
         if(!enabled||closed)return;
         JSONObject info=new JSONObject();
         try{
-            info.put("model",Build.MODEL);info.put("sdk",Build.VERSION.SDK_INT);
+            info.put("model",Build.MODEL);
+            info.put("app",activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName);info.put("sdk",Build.VERSION.SDK_INT);
             if(Build.VERSION.SDK_INT>=26&&WebView.getCurrentWebViewPackage()!=null)
                 info.put("webview",WebView.getCurrentWebViewPackage().versionName);
             StringBuilder codecs=new StringBuilder();int count=0;

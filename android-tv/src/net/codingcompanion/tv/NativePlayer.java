@@ -40,7 +40,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
     private boolean rendered;
     private String requestedMode=PlaybackFallback.AUTO;
     private Surface surface;
-    private String site, source="";
+    private String site, source="", mediaTicket="";
     private int token=-1, videoW, videoH;
     private boolean running, prepared, playing, busy, failed, wakePending, completedNaturally;
     private long prepareDeadline;
@@ -93,7 +93,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
             decoderPrefs.edit().putString("successful",fallback.mode()).apply();
         busy=true;
         String remembered=decoderPrefs.getString("successful","");
-        web.evaluateJavascript("window.CodingNative ? (CodingNative.decoderState("+JSONObject.quote(requestedMode)+","+JSONObject.quote(remembered)+","+JSONObject.quote(TvCompatibility.profile(Build.MODEL))+"),CodingNative.snapshot()) : null",result->{
+        web.evaluateJavascript("window.CodingNative ? (CodingNative.decoderState("+JSONObject.quote(requestedMode)+","+JSONObject.quote(remembered)+","+JSONObject.quote(TvCompatibility.profile(Build.MODEL))+","+(TclMediaSource.ticketTransport()&&!PlaybackFallback.BROWSER.equals(requestedMode))+") ,CodingNative.snapshot()) : null",result->{
             busy=false;
             if(!running)return;
             try{
@@ -108,12 +108,20 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
                 position(data);
                 String raw=data.optString("src");int id=data.getInt("id");
                 if(raw.isEmpty()){stopMedia(false);return;}
+                String ticket=data.optString("mediaTicket");
+                if(TclMediaSource.ticketTransport()&&!PlaybackFallback.BROWSER.equals(requestedMode)){
+                    if(ticket.length()>1024||!ticket.matches("[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+")){
+                        if(data.optBoolean("mediaTicketFailed")&&(!failed||id!=token||!raw.equals(source))){token=id;source=raw;terminalFailure("本集播放授权失败，请检查连接后重试");}
+                        return;
+                    }
+                }
                 if(id!=token||!raw.equals(source)){
                     MediaPlayer standby=completedNaturally&&!browser?next.take(mediaURL(raw),token):null;
-                    stopMedia(false);token=id;source=raw;fallback=new PlaybackFallback(requestedMode,decoderPrefs.getString("successful",""));if(surface!=null)open(raw,id,standby);else if(standby!=null)standby.release();
+                    stopMedia(false);token=id;source=raw;mediaTicket=ticket;fallback=new PlaybackFallback(requestedMode,decoderPrefs.getString("successful",""));if(surface!=null)open(raw,id,standby);else if(standby!=null)standby.release();
                 }
                 else if(media==null&&!browser&&!failed&&surface!=null&&source.length()>0)open(raw,id);
                 JSONArray commands=data.optJSONArray("commands");
+                if(TclMediaSource.ticketTransport()&&!ticket.isEmpty()){mediaTicket=ticket;TclMediaSource.ticket(media,ticket);}
                 if(browser){
                     if(!data.optBoolean("browser"))return;
                     diagnostics.browser(data.optJSONObject("browserDiagnostics"));
@@ -134,7 +142,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
                     report("timeupdate",positionMs()/1000.0,durationMs()/1000.0,null);
                     String hint=data.optString("next"),url="";
                     long remaining=durationMs()-positionMs();
-                    if(!TvCompatibility.applies(Build.MODEL)&&playing&&remaining>0&&remaining<=2000&&!hint.isEmpty()){
+                    if(!TclMediaSource.localTransport()&&playing&&remaining>0&&remaining<=2000&&!hint.isEmpty()){
                         try{
                             String proposed=mediaURL(hint);Uri current=Uri.parse(mediaURL(source)),following=Uri.parse(proposed);
                             if(current.getQueryParameter("series_id").equals(following.getQueryParameter("series_id"))&&Integer.parseInt(following.getQueryParameter("ep"))==Integer.parseInt(current.getQueryParameter("ep"))+1)url=proposed;
@@ -178,6 +186,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         Map<String,String> headers=new HashMap<>();String cookie=CookieManager.getInstance().getCookie(site+"/stream");
         if(cookie==null||cookie.isEmpty())cookie=CookieManager.getInstance().getCookie(site+"/");
         if(cookie!=null)headers.put("Cookie",cookie);
+        if(!mediaTicket.isEmpty())headers.put("X-Coding-Media",mediaTicket);
         headers.put("android-allow-cross-domain-redirect","0");return headers;
     }
     private long positionMs(){try{return media!=null&&prepared?media.getCurrentPosition():resumePosition;}catch(Exception ignored){return resumePosition;}}
@@ -249,7 +258,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         Matrix transform=new Matrix();transform.setScale(videoW*ratio/lp.width,videoH*ratio/lp.height,lp.width/2f,lp.height/2f);picture.setTransform(transform);
     }
     private void stopMedia(){stopMedia(true);}
-    private void stopMedia(boolean hide){releasePlayers();completedNaturally=false;failed=false;token=-1;source="";fallback=null;resumePosition=0;speed=1;if(hide)picture.setVisibility(View.INVISIBLE);}
+    private void stopMedia(boolean hide){releasePlayers();completedNaturally=false;failed=false;token=-1;source="";mediaTicket="";fallback=null;resumePosition=0;speed=1;if(hide)picture.setVisibility(View.INVISIBLE);}
     public void onSurfaceTextureAvailable(SurfaceTexture t,int w,int h){surface=new Surface(t);wake();}
     public void onSurfaceTextureSizeChanged(SurfaceTexture t,int w,int h){fit();}
     public boolean onSurfaceTextureDestroyed(SurfaceTexture t){if(!browser)stopMedia();if(surface!=null){surface.release();surface=null;}return true;}

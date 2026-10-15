@@ -19,7 +19,7 @@ HttpServer server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);Exec
 server.createContext("/foreign",e->{foreign.incrementAndGet();e.sendResponseHeaders(200,0);e.close();});
 server.createContext("/stream",e->{try{
  requests.incrementAndGet();String mode=e.getRequestURI().getQuery();
- if(!"coding_session=test-session".equals(e.getRequestHeaders().getFirst("Cookie"))){e.sendResponseHeaders(401,-1);return;}
+ if(!"coding_session=test-session".equals(e.getRequestHeaders().getFirst("Cookie"))&&!"fixture.signature".equals(e.getRequestHeaders().getFirst("X-Coding-Media"))){e.sendResponseHeaders(401,-1);return;}
  if("redirect".equals(mode)){e.getResponseHeaders().set("Location","/foreign");e.sendResponseHeaders(302,-1);return;}
  String range=e.getRequestHeaders().getFirst("Range");int start=0,end=media.length-1;
  if(range!=null){String[] parts=range.substring(6).split("-",-1);start=Integer.parseInt(parts[0]);if(!parts[1].isEmpty())end=Math.min(end,Integer.parseInt(parts[1]));}
@@ -33,6 +33,7 @@ server.createContext("/stream",e->{try{
 }catch(Exception ignored){}finally{e.close();}});server.start();
 String base="http://127.0.0.1:"+server.getAddress().getPort()+"/stream";List<TclMediaSource.Input> sources=new ArrayList<>();
 try{
+ TclMediaSource.Input ticketSource=new TclMediaSource.Input(base,null,"fixture.signature",null);sources.add(ticketSource);HttpURLConnection ticketRead=request(ticketSource.address(),"bytes=0-7");require(ticketRead.getResponseCode()==206&&read(ticketRead.getInputStream()).length==8,"empty WebView/Java Cookie still authenticates via episode ticket");
  List<String> reports=Collections.synchronizedList(new ArrayList<>());TclMediaSource.Input source=new TclMediaSource.Input(base,"coding_session=test-session",reports::add);sources.add(source);
  require(new URL(source.address()).getHost().equals("127.0.0.1")&&new URL(source.address()).getPath().matches("/[a-f0-9]{32}/video[.]mp4"),"loopback-only random capability path");
  for(int[] interval:new int[][]{{0,7},{400000,404095},{media.length-19,media.length-1}}){HttpURLConnection c=request(source.address(),"bytes="+interval[0]+"-"+interval[1]);require(c.getResponseCode()==206,"cookie-free OEM range authenticated by app");require(Arrays.equals(read(c.getInputStream()),Arrays.copyOfRange(media,interval[0],interval[1]+1)),"exact seek/tail bytes");c.disconnect();}

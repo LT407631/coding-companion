@@ -15,12 +15,12 @@
     var parent=document.querySelector('#tv-decoder-settings');if(!parent)return;
     var panel=document.querySelector('#tv-playback-diagnostics');
     if(!panel){panel=document.createElement('div');panel.id='tv-playback-diagnostics';
-      var button=document.createElement('button');button.textContent='展开播放诊断（TCL）';button.type='button';
+      var button=document.createElement('button');button.textContent='展开播放诊断';button.type='button';
       var output=document.createElement('pre');output.hidden=true;output.style.cssText='font-size:20px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:440px;overflow:auto;margin:12px 0';
-      button.onclick=function(){output.hidden=!output.hidden;button.textContent=output.hidden?'展开播放诊断（TCL）':'收起播放诊断（TCL）';if(!output.hidden)panel.scrollIntoView({block:'start'});};
+      button.onclick=function(){output.hidden=!output.hidden;button.textContent=output.hidden?'展开播放诊断':'收起播放诊断';if(!output.hidden)panel.scrollIntoView({block:'start'});};
       panel.appendChild(button);panel.appendChild(output);parent.appendChild(panel);
     }
-    var text='型号 '+info.model+' / Android API '+info.sdk+'\nWebView '+(info.webview||'未知')+'\nHEVC '+(info.hevc||'未知').slice(0,180)+'\n'+rows.slice(-6).map(function(r){return r.event+': '+r.note.slice(0,160);}).join('\n');
+    var text='型号 '+info.model+' / Android API '+info.sdk+' / App '+(info.app||'未知')+'\nWebView '+(info.webview||'未知')+'\nHEVC '+(info.hevc||'未知').slice(0,180)+'\n'+rows.slice(-6).map(function(r){return r.event+': '+r.note.slice(0,160);}).join('\n');
     var output=panel.querySelector('pre');if(output.textContent!==text)output.textContent=text;
   }
   function record(data){
@@ -46,8 +46,8 @@
     }).catch(function(e){if(e.name!=='AbortError')record({event:'browser-range',note:'exception='+e.name});}).finally(function(){clearTimeout(timer);});
   }
   function enable(value){
-    if(!value||String(value.model).toUpperCase()!=='TCL_MT5879_CN')return;
-    info={model:String(value.model).slice(0,64),sdk:Number(value.sdk)||0,webview:String(value.webview||'').slice(0,80),hevc:String(value.hevc||'').slice(0,800)};
+    if(!value||!/^(?:TCL_MT5879_CN|MITV.*|REDMI.*)$/.test(String(value.model).toUpperCase()))return;
+    info={model:String(value.model).slice(0,64),app:String(value.app||'').slice(0,32),sdk:Number(value.sdk)||0,webview:String(value.webview||'').slice(0,80),hevc:String(value.hevc||'').slice(0,800)};
     if(!enabled){enabled=true;window.addEventListener('hashchange',render);}render();
   }
   window.CodingTVDiagnostics={enable:enable,record:record,probe:probe,render:render,snapshot:function(){return {info:info,rows:rows.slice(),sent:sent};}};

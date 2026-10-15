@@ -1,5 +1,7 @@
 """Shared website password and revocable, persistent browser sessions."""
 import argparse
+import base64
+import json
 import re
 import hashlib
 import hmac
@@ -36,6 +38,11 @@ class SetupBody(BaseModel):
     password: StrictStr = Field(min_length=8, max_length=256)
 
 
+class MediaTicketBody(BaseModel):
+    series_id: StrictStr = Field(pattern=r"^[0-9]{1,24}$")
+    ep: int = Field(ge=1, le=999999, strict=True)
+
+
 class SiteAuth:
     def __init__(self, path, clock=time.time):
         self.path = Path(path)
@@ -44,6 +51,7 @@ class SiteAuth:
         self.lock = threading.RLock()
         self.attempts = {}
         self.global_attempts = deque()
+        self.media_key = secrets.token_bytes(32)
         with self.database() as db:
             db.execute("CREATE TABLE IF NOT EXISTS password (id INTEGER PRIMARY KEY CHECK(id=1), salt BLOB, digest BLOB)")
             db.execute("CREATE TABLE IF NOT EXISTS sessions (digest TEXT PRIMARY KEY, expires REAL)")
@@ -131,6 +139,38 @@ class SiteAuth:
     def valid(self, token):
         return bool(self.expires(token))
 
+    def media_ticket(self, token, series_id, ep):
+        expires = self.expires(token)
+        if not expires:
+            return None
+        until = min(int(expires), int(self.clock()) + 900)
+        payload = json.dumps({"s": self.session_digest(token), "v": series_id, "e": ep, "x": until},
+                             separators=(",", ":")).encode()
+        body = base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
+        signature = hmac.new(self.media_key, body.encode(), hashlib.sha256).digest()
+        return {"token": body + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode(),
+                "expires_at": until}
+
+    def valid_media_ticket(self, ticket, series_id, ep):
+        if not isinstance(ticket, str) or len(ticket) > 1024 or not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", ticket):
+            return False
+        try:
+            body, signature = ticket.split(".")
+            actual = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+            expected = hmac.new(self.media_key, body.encode(), hashlib.sha256).digest()
+            if not hmac.compare_digest(actual, expected):
+                return False
+            data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+            if (data.get("v") != series_id or str(data.get("e")) != ep
+                    or type(data.get("x")) is not int or data["x"] <= self.clock()
+                    or not re.fullmatch(r"[0-9a-f]{64}", data.get("s", ""))):
+                return False
+            with self.database() as db:
+                row = db.execute("SELECT expires FROM sessions WHERE digest=?", (data["s"],)).fetchone()
+                return bool(row and row[0] > self.clock())
+        except (ValueError, TypeError, KeyError, UnicodeError, AttributeError):
+            return False
+
     def logout(self, token):
         if token and token.isascii() and len(token) <= 100:
             with self.lock, self.database() as db:
@@ -167,7 +207,12 @@ class AuthMiddleware:
         public_update = method in {"GET", "HEAD"} and re.fullmatch(r"/updates/android-tv(?:-public)?/(latest|[0-9a-f]{64}\.apk)", path) is not None
         authenticated = self.auth.valid(request.cookies.get(COOKIE))
         scope.setdefault("state", {})["site_authenticated"] = authenticated
-        if not public and not public_update and not local_health and not authenticated:
+        query = request.query_params
+        media_access = (path == "/stream" and method in {"GET", "HEAD"} and "vid" not in query
+                        and len(query.getlist("series_id")) == 1 and len(query.getlist("ep")) == 1
+                        and self.auth.valid_media_ticket(request.headers.get("x-coding-media"),
+                                                         query.get("series_id"), query.get("ep")))
+        if not public and not public_update and not local_health and not authenticated and not media_access:
             if path in {"/", "/ui", "/phone-input"} and method in {"GET", "HEAD"}:
                 query = scope.get("query_string", b"").decode("ascii", errors="ignore")
                 target = path + ("?" + query if query else "")
@@ -294,6 +339,13 @@ def install_auth(app, auth, login_page):
         if not token:
             return form_failure(target, "incorrect")
         return signed_in(token, request, RedirectResponse(target, status_code=303))
+
+    @app.post("/auth/media-ticket", include_in_schema=False)
+    def media_ticket(body: MediaTicketBody, request: Request):
+        ticket = auth.media_ticket(request.cookies.get(COOKIE), body.series_id, body.ep)
+        if not ticket:
+            return JSONResponse({"detail": "请先登录"}, status_code=401)
+        return JSONResponse(ticket, headers={"Cache-Control": "no-store"})
 
     @app.get("/auth/session", include_in_schema=False)
     def session(request: Request):
