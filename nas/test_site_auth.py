@@ -149,6 +149,23 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.request("/admin", cookie=token, headers={"x-admin-token": "fixture-admin-token"})[0], 200)
         self.assertEqual(self.request("/admin", headers={"x-admin-token": "fixture-admin-token"})[0], 401)
 
+    def test_session_details_expiry_and_logout(self):
+        self.assertEqual(self.request('/auth/session')[0], 401)
+        token, _ = self.login()
+        status, headers, body = self.request('/auth/session', cookie=token)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data, {'authenticated': True, 'auth_type': 'shared_password',
+                                'display_name': '网站用户', 'expires_at': self.now + SESSION_SECONDS})
+        self.assertNotIn(token, body.decode())
+        self.assertEqual(headers['cache-control'], 'no-store')
+        self.assertEqual(self.request('/auth/logout', 'POST', cookie=token)[0], 200)
+        self.assertEqual(self.request('/auth/session', cookie=token)[0], 401)
+        self.assertEqual(self.request('/ui', cookie=token)[0], 303)
+        token, _ = self.login()
+        self.now += SESSION_SECONDS
+        self.assertEqual(self.request('/auth/session', cookie=token)[0], 401)
+
     def test_logout_revokes_copied_cookie(self):
         token, _ = self.login()
         self.assertEqual(self.request("/auth/logout", "POST", cookie=token)[0], 200)

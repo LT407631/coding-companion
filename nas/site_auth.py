@@ -121,12 +121,15 @@ class SiteAuth:
             db.execute("INSERT INTO sessions VALUES (?, ?)", (self.session_digest(token), now + SESSION_SECONDS))
             return token
 
-    def valid(self, token):
+    def expires(self, token):
         if not token or len(token) > 100 or not token.isascii():
             return False
         with self.database() as db:
             row = db.execute("SELECT expires FROM sessions WHERE digest=?", (self.session_digest(token),)).fetchone()
-            return bool(row and row[0] > self.clock())
+            return row[0] if row and row[0] > self.clock() else None
+
+    def valid(self, token):
+        return bool(self.expires(token))
 
     def logout(self, token):
         if token and token.isascii() and len(token) <= 100:
@@ -161,8 +164,10 @@ class AuthMiddleware:
         # Uvicorn runs with proxy_headers=False; this exemption is Docker-local only.
         local_health = path == "/healthz" and method in {"GET", "HEAD"} and peer in {"127.0.0.1", "::1"}
         public = (path == "/login" and method in {"GET", "HEAD"}) or (path in {"/auth/login", "/auth/login-form", "/auth/setup"} and method == "POST")
-        public_update = method in {"GET", "HEAD"} and re.fullmatch(r"/updates/android-tv-public/(latest|[0-9a-f]{64}\.apk)", path) is not None
-        if not public and not public_update and not local_health and not self.auth.valid(request.cookies.get(COOKIE)):
+        public_update = method in {"GET", "HEAD"} and re.fullmatch(r"/updates/android-tv(?:-public)?/(latest|[0-9a-f]{64}\.apk)", path) is not None
+        authenticated = self.auth.valid(request.cookies.get(COOKIE))
+        scope.setdefault("state", {})["site_authenticated"] = authenticated
+        if not public and not public_update and not local_health and not authenticated:
             if path in {"/", "/ui", "/phone-input"} and method in {"GET", "HEAD"}:
                 query = scope.get("query_string", b"").decode("ascii", errors="ignore")
                 target = path + ("?" + query if query else "")
@@ -289,6 +294,15 @@ def install_auth(app, auth, login_page):
         if not token:
             return form_failure(target, "incorrect")
         return signed_in(token, request, RedirectResponse(target, status_code=303))
+
+    @app.get("/auth/session", include_in_schema=False)
+    def session(request: Request):
+        expires = auth.expires(request.cookies.get(COOKIE))
+        if not expires:
+            return JSONResponse({"detail": "请先登录"}, status_code=401)
+        return JSONResponse({"authenticated": True, "auth_type": "shared_password",
+                             "display_name": "网站用户", "expires_at": expires},
+                            headers={"Cache-Control": "no-store"})
 
     @app.post("/auth/logout", include_in_schema=False)
     def logout(request: Request):

@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 PACKAGE = 'net.codingcompanion.tv'
@@ -55,24 +55,31 @@ class TvReleases:
 
 def install_tv_updates(app, directory):
     releases = TvReleases(directory)
+    public_releases = TvReleases(Path(directory).parent / 'tv-updates-public', '/updates/android-tv-public')
 
-    @app.get('/updates/android-tv/latest', include_in_schema=False)
-    def latest():
-        return JSONResponse(releases.latest(), headers={'Cache-Control': 'private, no-store'})
-
-    @app.get('/updates/android-tv/{filename}', include_in_schema=False)
-    def download(filename: str):
+    def file_response(store, filename):
         if not re.fullmatch(r'[0-9a-f]{64}\.apk', filename):
             raise HTTPException(404)
-        release = releases.latest()
+        release = store.latest()
         if not release['available'] or filename != release['sha256'] + '.apk':
             raise HTTPException(404)
-        return FileResponse(releases.directory / filename, media_type='application/vnd.android.package-archive',
+        return FileResponse(store.directory / filename, media_type='application/vnd.android.package-archive',
                             filename='coding-companion-tv-' + release['version_name'] + '.apk',
                             headers={'Cache-Control': 'private, no-store'})
 
-    # Only separately published, sanitized APKs belong in this directory.
-    public_releases = TvReleases(Path(directory).parent / 'tv-updates-public', '/updates/android-tv-public')
+    @app.get('/updates/android-tv/latest', include_in_schema=False)
+    def latest(request: Request):
+        # Older APKs require the original download path, even before login.
+        store = releases if getattr(request.state, 'site_authenticated', False) else public_releases
+        release = store.latest()
+        if release['available']:
+            release['url'] = '/updates/android-tv/' + release['sha256'] + '.apk'
+        return JSONResponse(release, headers={'Cache-Control': 'private, no-store'})
+
+    @app.get('/updates/android-tv/{filename}', include_in_schema=False)
+    def download(filename: str, request: Request):
+        store = releases if getattr(request.state, 'site_authenticated', False) else public_releases
+        return file_response(store, filename)
 
     @app.get('/updates/android-tv-public/latest', include_in_schema=False)
     def public_latest():
@@ -80,12 +87,6 @@ def install_tv_updates(app, directory):
 
     @app.get('/updates/android-tv-public/{filename}', include_in_schema=False)
     def public_download(filename: str):
-        if not re.fullmatch(r'[0-9a-f]{64}\.apk', filename):
-            raise HTTPException(404)
-        release = public_releases.latest()
-        if not release['available'] or filename != release['sha256'] + '.apk':
-            raise HTTPException(404)
-        return FileResponse(public_releases.directory / filename, media_type='application/vnd.android.package-archive',
-                            headers={'Cache-Control': 'no-store'})
+        return file_response(public_releases, filename)
 
     return releases

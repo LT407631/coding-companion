@@ -322,7 +322,7 @@ class LeasedFileResponse(FileResponse):
 
 
 @app.get("/stream")
-def stream(series_id: str = Query(None, pattern=r"^\d{1,24}$"), ep: int = Query(1, ge=1), vid: str = Query(None, pattern=r"^\d{1,24}$"), tv_profile: str = Query("", pattern=r"^(|tcl-hevc)$")):
+def stream(series_id: str = Query(None, pattern=r"^\d{1,24}$"), ep: int = Query(1, ge=1), vid: str = Query(None, pattern=r"^\d{1,24}$"), tv_profile: str = Query("", pattern=r"^(|tcl-hevc|hevc-meta)$")):
     if not vid:
         if not series_id:
             raise HTTPException(400, "缺少剧集编号")
@@ -336,7 +336,7 @@ def stream(series_id: str = Query(None, pattern=r"^\d{1,24}$"), ep: int = Query(
     try:
         with timings.measure('stream'):
             path = playback.ensure(vid)
-        if tv_profile == "tcl-hevc":
+        if tv_profile in {"tcl-hevc", "hevc-meta"}:
             path = compatibility_path = tv_compat.acquire(path)
         return LeasedFileResponse(path, vid, compatibility_path)
     except Exception as exc:

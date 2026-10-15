@@ -17,7 +17,7 @@ import org.json.JSONObject;
 final class TvPlaybackDiagnostics {
     private final Activity activity;
     private final WebView web;
-    private final boolean enabled=TvCompatibility.applies(Build.MODEL);
+    private final boolean enabled=TclMediaSource.localTransport();
     private final AtomicBoolean probing=new AtomicBoolean();
     private volatile HttpURLConnection connection;
     private volatile boolean closed;

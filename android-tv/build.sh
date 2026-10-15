@@ -26,13 +26,13 @@ cp build/light/base.apk build/light/unsigned.apk
 # The standard local debug certificate is sufficient for a private sideload build.
 KEYSTORE="${TV_KEYSTORE:-$HOME/.android/debug.keystore}"
 test -f "$KEYSTORE" || { echo "Missing signing keystore: $KEYSTORE" >&2; exit 1; }
-"$TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out build/coding-companion-tv-1.0.43.apk build/light/aligned.apk
-"$TOOLS/apksigner" verify --verbose build/coding-companion-tv-1.0.43.apk
-"$TOOLS/aapt2" dump badging build/coding-companion-tv-1.0.43.apk
+"$TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out build/coding-companion-tv-1.0.44.apk build/light/aligned.apk
+"$TOOLS/apksigner" verify --verbose build/coding-companion-tv-1.0.44.apk
+"$TOOLS/aapt2" dump badging build/coding-companion-tv-1.0.44.apk
 # Keep the wrapper free of native decoder libraries and within the package limit.
 python3 - <<'PYSIZE'
 import pathlib, zipfile
-apk=pathlib.Path('build/coding-companion-tv-1.0.43.apk')
+apk=pathlib.Path('build/coding-companion-tv-1.0.44.apk')
 with zipfile.ZipFile(apk) as archive:
     assert not any(n.startswith('lib/') for n in archive.namelist()), 'Unexpected bundled native decoder'
 assert apk.stat().st_size < 30_000_000, 'TV package exceeds the authorized 30 MB limit'

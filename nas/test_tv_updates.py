@@ -25,37 +25,42 @@ class TvUpdateTests(unittest.TestCase):
         self.write_manifest()
         self.token, _ = self.login()
 
-    def test_public_feed_is_separate_and_business_stays_private(self):
+    def test_public_feed_legacy_alias_and_private_bytes_are_isolated(self):
         self.release()
-        status, _, body = self.request('/updates/android-tv-public/latest')
-        self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body), {'available': False})
+        self.assertEqual(json.loads(self.request('/updates/android-tv/latest')[2]), {'available': False})
         public = self.directory.parent / 'tv-updates-public'
         public.mkdir()
-        (public / 'latest.json').write_text(json.dumps(self.manifest))
-        (public / (self.digest + '.apk')).write_bytes(self.apk)
-        status, _, body = self.request('/updates/android-tv-public/latest')
-        self.assertEqual(status, 200)
-        path = json.loads(body)['url']
-        self.assertEqual(path, '/updates/android-tv-public/' + self.digest + '.apk')
-        self.assertEqual(self.request(path)[2], self.apk)
-        status, _, body = self.request(path, headers={'range': 'bytes=0-3'})
-        self.assertEqual(status, 206)
-        self.assertEqual(body, self.apk[:4])
-        for denied in ['/watch-state', '/search', '/updates/android-tv/latest', self.path,
-                       '/updates/android-tv-public/latest.json', '/updates/android-tv-public/../latest']:
+        apk = b'public-sanitized-apk'
+        digest = hashlib.sha256(apk).hexdigest()
+        manifest = dict(self.manifest, size=len(apk), sha256=digest)
+        (public / 'latest.json').write_text(json.dumps(manifest))
+        (public / (digest + '.apk')).write_bytes(apk)
+        for prefix in ['/updates/android-tv', '/updates/android-tv-public']:
+            status, _, body = self.request(prefix + '/latest')
+            self.assertEqual(status, 200)
+            path = json.loads(body)['url']
+            self.assertEqual(path, prefix + '/' + digest + '.apk')
+            self.assertEqual(self.request(path)[2], apk)
+            status, _, body = self.request(path, headers={'range': 'bytes=0-3'})
+            self.assertEqual((status, body), (206, apk[:4]))
+            self.assertEqual(self.request(prefix + '/' + self.digest + '.apk')[0], 404)
+        self.assertEqual(self.request(self.path, cookie=self.token)[2], self.apk)
+        self.auth.logout(self.token)
+        self.assertEqual(self.request(self.path, cookie=self.token)[0], 404)
+        for denied in ['/watch-state', '/search', '/auth/session', '/updates/android-tv-public/latest.json',
+                       '/updates/android-tv-public/../latest']:
             self.assertEqual(self.request(denied)[0], 401, denied)
-        self.assertEqual(self.request(path, method='POST')[0], 401)
+        self.assertEqual(self.request('/updates/android-tv/latest', method='POST')[0], 401)
 
     def write_manifest(self):
         (self.directory / 'latest.json').write_text(json.dumps(self.manifest))
 
     def test_anonymous_manifest_and_apk_denied_then_revoked_session_denied(self):
         self.release()
-        for path in ('/updates/android-tv/latest', self.path):
-            self.assertEqual(self.request(path)[0], 401)
+        self.assertEqual(json.loads(self.request('/updates/android-tv/latest')[2]), {'available': False})
+        self.assertEqual(self.request(self.path)[0], 404)
         self.auth.logout(self.token)
-        self.assertEqual(self.request(self.path, cookie=self.token)[0], 401)
+        self.assertEqual(self.request(self.path, cookie=self.token)[0], 404)
 
     def test_authenticated_metadata_and_exact_download_private_uncached(self):
         self.release()

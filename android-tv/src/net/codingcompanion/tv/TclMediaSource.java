@@ -91,7 +91,12 @@ final class TclMediaSource {
         @Override public void release(){if(input!=null){input.close();input=null;}super.release();}
         @Override public void reset(){if(input!=null){input.close();input=null;}super.reset();}
     }
-    static MediaPlayer create(){return TvCompatibility.applies(Build.MODEL)?new Player():new MediaPlayer();}
+    static boolean localTransport(){
+        String maker=Build.MANUFACTURER==null?"":Build.MANUFACTURER.toLowerCase(Locale.ROOT);
+        String model=Build.MODEL==null?"":Build.MODEL.toLowerCase(Locale.ROOT);
+        return TvCompatibility.applies(Build.MODEL)||maker.equals("xiaomi")||maker.equals("redmi")||model.startsWith("mitv")||model.startsWith("redmi");
+    }
+    static MediaPlayer create(){return localTransport()?new Player():new MediaPlayer();}
     static MediaPlayer createHardware(){
         if(!TvCompatibility.applies(Build.MODEL)||Build.VERSION.SDK_INT<29)throw new IllegalStateException("TCL hardware route unavailable");
         return new TclHardwarePlayer();

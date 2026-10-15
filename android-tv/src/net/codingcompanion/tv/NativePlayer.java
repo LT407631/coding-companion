@@ -79,6 +79,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         if(sid==null||!sid.matches("[0-9]{1,24}")||ep==null||!ep.matches("[0-9]{1,6}")||Integer.parseInt(ep)<1) throw new Exception("视频编号无效");
         Uri.Builder address=Uri.parse(site).buildUpon().path("/stream").appendQueryParameter("series_id",sid).appendQueryParameter("ep",ep);
         if(TvCompatibility.applies(Build.MODEL))address.appendQueryParameter("tv_profile","tcl-hevc");
+        else if(TclMediaSource.localTransport())address.appendQueryParameter("tv_profile","hevc-meta");
         return diagnostics.tag(address.build().toString(),fallback!=null&&PlaybackFallback.BROWSER.equals(fallback.mode())?"browser":"system");
     }
     private void poll(){
@@ -174,7 +175,8 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
         }
     }
     private Map<String,String> headers(){
-        Map<String,String> headers=new HashMap<>();String cookie=CookieManager.getInstance().getCookie(site);
+        Map<String,String> headers=new HashMap<>();String cookie=CookieManager.getInstance().getCookie(site+"/stream");
+        if(cookie==null||cookie.isEmpty())cookie=CookieManager.getInstance().getCookie(site+"/");
         if(cookie!=null)headers.put("Cookie",cookie);
         headers.put("android-allow-cross-domain-redirect","0");return headers;
     }

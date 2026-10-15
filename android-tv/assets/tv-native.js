@@ -87,7 +87,7 @@
   function useBrowser(id,url,position,rate){
     var s=current;if(!s||s.id!==id||!s.v.isConnected||!/^#\/watch\//.test(location.hash))return false;
     var address;try{address=new URL(url,location.href);}catch(_){return false;}
-    if(address.origin!==location.origin||address.username||address.password||address.hash||address.pathname!=='/stream'||!/^\?series_id=[0-9]{1,24}&ep=[0-9]{1,6}(?:&tv_profile=tcl-hevc)?(?:&tv_diag_route=(?:system|browser))?$/.test(address.search)||Number(address.searchParams.get('ep'))<1)return false;
+    if(address.origin!==location.origin||address.username||address.password||address.hash||address.pathname!=='/stream'||!/^\?series_id=[0-9]{1,24}&ep=[0-9]{1,6}(?:&tv_profile=(?:tcl-hevc|hevc-meta))?(?:&tv_diag_route=(?:system|browser))?$/.test(address.search)||Number(address.searchParams.get('ep'))<1)return false;
     if(s.browser)stopBrowser(s);
     s.browser=true;s.browserError=false;s.picture=false;s.commands=[];s.seekSerial=0;s.resume=Math.max(0,Number(position)||0);s.rate=Number(rate)||1;
     s.v.style.opacity='1';s.properties.src.set.call(s.v,address.href);s.originals.load();
@@ -111,6 +111,7 @@
   }
   function pictureMeasured(s){
     if(!s.browser)return false;
+    if(s.v.videoWidth<=0||s.v.videoHeight<=0)return true;
     if(s.v.requestVideoFrameCallback)return true;
     try{if(s.v.getVideoPlaybackQuality)return Number.isFinite(s.v.getVideoPlaybackQuality().totalVideoFrames);
       return Number.isFinite(s.v.webkitDecodedFrameCount);

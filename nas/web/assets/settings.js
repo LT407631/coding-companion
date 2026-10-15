@@ -20,6 +20,12 @@ async function vSettings() {
   renderGtabs(true);
   const deviceSettings = DeviceMedia.settings();
   $('#view').innerHTML = `
+    <div class="setbox" id="site-session-panel"><h3>登录与用户</h3>
+      <div id="site-session-status" role="status">正在核验登录状态…</div>
+      <div class="note" id="site-session-user"></div><div class="note" id="site-session-expiry"></div>
+      <p class="note">本站使用共享网站密码。登录有效期内打开会直接进入；家庭用户用于区分各自的观看记录。</p>
+      <button class="ghost" type="button" onclick="logoutSite()">退出此设备登录</button>
+    </div>
     <div class="settings-password-action" style="margin-bottom:16px"><button class="ghost" id="site-password-toggle" type="button" aria-controls="site-password-panel" aria-expanded="false" onclick="toggleSitePassword()">修改密码</button></div>
     <div class="setbox" id="site-password-panel" hidden><h3>网站密码</h3>
       <div class="note">密码用于局域网和外网的网站访问。修改后，所有设备都需要重新登录。</div>
@@ -30,7 +36,6 @@ async function vSettings() {
         <button class="btn-pink" id="site-password-save" type="submit">修改密码并重新登录</button>
         <div class="note" id="site-password-result" role="status" style="margin-top:10px"></div>
       </form>
-      <button class="ghost" type="button" onclick="logoutSite()" style="margin-top:16px">退出此设备登录</button>
     </div>
     <div class="setbox"><h3>播放服务</h3>
       <div class="kv"><span class="k">网页播放服务</span><span class="oktag" id="st1">检查中…</span></div>
@@ -82,6 +87,7 @@ async function vSettings() {
   CodingWatchUI.settings();
   if (window.CodingProfiles) CodingProfiles.settings();
   settingsPage = {form:$('#site-password-form'), ready:false, pending:null, read:null, exit:new AbortController()};
+  loadSiteSession(settingsPage);
   initDeviceSettings();
   return refreshSettings();
 }
@@ -175,4 +181,21 @@ async function initDeviceSettings(page = settingsPage) {
 async function clearDeviceCache() {
   const page = settingsPage;
   try {await DeviceMedia.clear();if (!settingsLive(page)) return;await initDeviceSettings(page);if (settingsLive(page)) toast('此设备视频缓存已清理');} catch (_) {if (settingsLive(page)) toast('设备缓存清理失败，请重试');}
+}
+
+
+async function loadSiteSession(page) {
+  try {
+    const response = await fetch('/auth/session', {cache:'no-store', signal:page.exit.signal});
+    if (!response.ok) throw new Error('无法核验登录状态');
+    const session = await response.json();
+    if (!session.authenticated || session.auth_type !== 'shared_password') throw new Error('登录状态无效');
+    if (window.CodingProfiles) await CodingProfiles.ready();
+    if (!settingsLive(page)) return;
+    $('#site-session-status').textContent = '网站登录：已登录（共享密码验证）';
+    $('#site-session-user').textContent = '当前家庭用户：' + (window.CodingProfiles ? CodingProfiles.name() : '默认用户');
+    $('#site-session-expiry').textContent = '此设备登录有效至：' + new Date(session.expires_at * 1000).toLocaleString();
+  } catch (error) {
+    if (settingsLive(page) && error.name !== 'AbortError') $('#site-session-status').textContent = '暂时无法核验登录状态，请重新打开设置';
+  }
 }

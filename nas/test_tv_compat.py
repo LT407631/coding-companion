@@ -200,7 +200,7 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         token, _ = fixture.login()
         self.assertEqual(fixture.request("/stream?vid=42&tv_profile=unknown", cookie=token)[0], 422)
-        for query, calls in (("", 0), ("&tv_profile=tcl-hevc", 1), ("&tv_profile=tcl-hevc", 1)):
+        for query, calls in (("", 0), ("&tv_profile=tcl-hevc", 1), ("&tv_profile=hevc-meta", 1), ("&tv_profile=tcl-hevc", 1)):
             status, headers, body = fixture.request("/stream?vid=42" + query, cookie=token,
                                                    headers={"range": "bytes=0-7"})
             self.assertEqual((status, body), (206, b"original"))

@@ -45,6 +45,7 @@ async function run(){
   const id=await page.evaluate(()=>CodingNative.snapshot().id);
   assert.equal(await page.evaluate(id=>CodingNative.useBrowser(id,location.origin+'/stream?series_id=123&ep=1&tv_profile=unknown',0,1),id),false);
   assert.equal(await page.evaluate(id=>CodingNative.useBrowser(id,'https://evil.example/stream?series_id=123&ep=1',0,1),id),false);
+  assert.equal(await page.evaluate(id=>CodingNative.useBrowser(id,location.origin+'/stream?series_id=123&ep=1&tv_profile=hevc-meta',3,1),id),true);
   assert.equal(await page.evaluate(id=>CodingNative.useBrowser(id,location.origin+'/stream?series_id=123&ep=1&tv_profile=tcl-hevc',3,1),id),true);
   await page.waitForFunction(()=>CodingNative.snapshot().pictureOutput&&W.video.currentTime>3.5);
   const actual=await page.evaluate(()=>({snapshot:CodingNative.snapshot(),width:W.video.videoWidth,height:W.video.videoHeight,history:savedHistory,clock:document.querySelector('.tv-clock').textContent}));
