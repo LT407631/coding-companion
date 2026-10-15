@@ -35,6 +35,14 @@ class WebAssetsTest(unittest.TestCase):
             self.assertIn(f'<h4 class="settings-subtitle">{heading}</h4>', settings)
         self.assertIn('保存播放与缓存设置', settings)
 
+    def test_login_has_old_webview_form_and_color_fallbacks(self):
+        login = Path(__file__).with_name('web').joinpath('login.html').read_text()
+        self.assertIn('<form id="login-form" method="post" action="/auth/login-form">', login)
+        self.assertIn('name="password"', login)
+        self.assertIn("if (!setupToken) return;", login)
+        self.assertIn('background:#f5f6f8;background:var(--bg)', login)
+        self.assertIn('color:#1f2129;color:var(--text)', login)
+
 
 if __name__ == '__main__':
     unittest.main()

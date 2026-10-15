@@ -78,6 +78,12 @@ class AuthTests(unittest.TestCase):
         cookies = SimpleCookie(headers["set-cookie"])
         return cookies[COOKIE].value, headers
 
+    def form_login(self, body=b"password=fixture-password", origin="http://site.test"):
+        return self.request(
+            "/auth/login-form", "POST", raw=body, origin=origin,
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+
     def test_default_deny_before_original_endpoints_and_middleware(self):
         for path in ["/search", "/play?series_id=1", "/episodes", "/img", "/stream", "/playback/status", "/docs", "/redoc", "/openapi.json", "/admin", "/stats", "/not-yet-existing", "/auth/password", "/ui/"]:
             with self.subTest(path=path):
@@ -107,6 +113,25 @@ class AuthTests(unittest.TestCase):
         contents = self.auth.path.read_bytes()
         for value in (b"fixture-password", token.encode(), self.setup_token.encode()):
             self.assertNotIn(value, contents)
+
+    def test_native_form_login_sets_cookie_on_the_redirect_for_old_webviews(self):
+        status, headers, _ = self.form_login()
+        self.assertEqual((status, headers["location"]), (303, "/ui"))
+        cookie = SimpleCookie(headers["set-cookie"])[COOKIE]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual((cookie["samesite"], cookie["path"]), ("lax", "/"))
+        self.assertEqual(self.request("/ui", cookie=cookie.value)[0], 200)
+
+        status, headers, _ = self.form_login(b"password=fixture-password&next=%2Fui%3Fv%3Dfixture")
+        self.assertEqual((status, headers["location"]), (303, "/ui?v=fixture"))
+        status, headers, _ = self.form_login(b"password=fixture-password&next=%2F%2Fevil.example")
+        self.assertEqual((status, headers["location"]), (303, "/ui"))
+
+    def test_native_form_login_keeps_failures_on_the_login_page(self):
+        status, headers, body = self.form_login(b"password=wrong&next=%2Fui")
+        self.assertEqual(status, 303)
+        self.assertEqual(headers["location"], "/login?next=%2Fui&error=incorrect")
+        self.assertNotIn(b"wrong", body)
 
     def test_native_video_range_and_private_cached_images(self):
         token, _ = self.login()
@@ -154,6 +179,9 @@ class AuthTests(unittest.TestCase):
                 with self.subTest(origin=origin, path=path):
                     self.assertEqual(self.request(path, "POST", data, cookie=cookie, origin=origin)[0], 403)
         self.assertTrue(self.auth.valid(token))
+        for origin in (None, "null", "http://attacker.test", "http://site.test.attacker.test"):
+            with self.subTest(origin=origin, path="/auth/login-form"):
+                self.assertEqual(self.form_login(origin=origin)[0], 403)
 
     def test_login_rate_limit_and_spoofed_forwarded_addresses(self):
         for _ in range(5):
@@ -205,7 +233,9 @@ class AuthTests(unittest.TestCase):
     def test_anonymous_body_limit_without_content_length_and_simple_form_rejected(self):
         self.assertEqual(self.request("/auth/login", "POST", raw=b"x" * 4097, more_body=True)[0], 413)
         self.assertEqual(self.request("/auth/setup", "POST", raw=b"x" * 4097, more_body=True)[0], 413)
+        self.assertEqual(self.form_login(b"x" * 4097)[0], 413)
         self.assertEqual(self.request("/auth/login", "POST", {"password": "fixture-password"}, headers={"content-type": "text/plain"})[0], 415)
+        self.assertEqual(self.request("/auth/login-form", "POST", raw=b"password=fixture-password", headers={"content-type": "text/plain"})[0], 415)
 
     def test_malformed_and_short_passwords_and_untrusted_cookies(self):
         self.assertEqual(self.request("/auth/login", "POST", raw=b"not-json")[0], 422)

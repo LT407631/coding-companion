@@ -33,6 +33,7 @@ import java.io.InputStream;
 /** TV shell for the existing private site. No credentials or JS-to-Java bridge. */
 public final class MainActivity extends Activity {
     private static final String DEFAULT_SITE = "http://nas.local:8010";
+    private static final int LOGIN_BACKGROUND = Color.rgb(245,246,248);
     private WebView web;
     private FrameLayout root;
     private View custom;
@@ -55,7 +56,7 @@ public final class MainActivity extends Activity {
         setContentView(root);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(-1,-1));
-        web.setBackgroundColor(Color.TRANSPARENT);
+        web.setBackgroundColor(LOGIN_BACKGROUND);
         nativePlayer=new NativePlayer(this,root,web,site);
         updater=new TvUpdater(this);
         WebView.setWebContentsDebuggingEnabled(false);
@@ -79,9 +80,10 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return navigation(url); }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest r) { return r.isForMainFrame() && navigation(r.getUrl().toString()); }
-            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) { hideError(); }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) { pageBackground(url);hideError(); }
             @Override public void onPageFinished(WebView view, String url) {
                 if (!allowed(url)) return;
+                pageBackground(url);
                 // TV firmware often reports a phone-sized CSS viewport even on a 4K panel.
                 int width=Math.max(1280,Math.min(2560,view.getWidth()));
                 float scale=view.getWidth()/getResources().getDisplayMetrics().density/width;
@@ -125,6 +127,10 @@ public final class MainActivity extends Activity {
         int p=u.getPort()<0?("https".equals(u.getScheme())?443:80):u.getPort();
         int bp=base.getPort()<0?("https".equals(base.getScheme())?443:80):base.getPort();
         return base.getScheme().equals(u.getScheme()) && base.getHost().equalsIgnoreCase(u.getHost()==null?"":u.getHost()) && p==bp;
+    }
+    private void pageBackground(String url) {
+        Uri page=Uri.parse(url==null?"":url);
+        web.setBackgroundColor(url!=null&&allowed(url)&&"/ui".equals(page.getPath())?Color.TRANSPARENT:LOGIN_BACKGROUND);
     }
     private boolean navigation(String url) {
         if("codingtv://media".equals(url)) {nativePlayer.wake();return true;}

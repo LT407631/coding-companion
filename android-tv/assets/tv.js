@@ -3,7 +3,7 @@
   if (window.CodingTV) return;
   var selector = 'button,a[href],input,select,textarea,[role="button"],[role="slider"],[onclick],.chip,video';
   // Tabler Icons (MIT), https://github.com/tabler/tabler-icons; license bundled in assets.
-  var icons={"player-skip-back":"<svg class=\"tv-icon-player-skip-back\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M20 5v14l-12 -7l12 -7\" /> <path d=\"M4 5l0 14\" /> </svg>","player-play":"<svg class=\"tv-icon-player-play\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M7 4v16l13 -8l-13 -8\" /> </svg>","player-pause":"<svg class=\"tv-icon-player-pause\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M6 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12\" /> <path d=\"M14 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12\" /> </svg>","player-skip-forward":"<svg class=\"tv-icon-player-skip-forward\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M4 5v14l12 -7l-12 -7\" /> <path d=\"M20 5l0 14\" /> </svg>","maximize":"<svg class=\"tv-icon-maximize\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M4 8v-2a2 2 0 0 1 2 -2h2\" /> <path d=\"M4 16v2a2 2 0 0 0 2 2h2\" /> <path d=\"M16 4h2a2 2 0 0 1 2 2v2\" /> <path d=\"M16 20h2a2 2 0 0 0 2 -2v-2\" /> </svg>","list":"<svg class=\"tv-icon-list\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M9 6l11 0\" /> <path d=\"M9 12l11 0\" /> <path d=\"M9 18l11 0\" /> <path d=\"M5 6l0 .01\" /> <path d=\"M5 12l0 .01\" /> <path d=\"M5 18l0 .01\" /> </svg>"};
+  var icons={"player-skip-back":"<svg class=\"tv-icon-player-skip-back\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M20 5v14l-12 -7l12 -7\" /> <path d=\"M4 5l0 14\" /> </svg>","player-play":"<svg class=\"tv-icon-player-play\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M7 4v16l13 -8l-13 -8\" /> </svg>","player-pause":"<svg class=\"tv-icon-player-pause\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M6 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12\" /> <path d=\"M14 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12\" /> </svg>","player-skip-forward":"<svg class=\"tv-icon-player-skip-forward\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M4 5v14l12 -7l-12 -7\" /> <path d=\"M20 5l0 14\" /> </svg>","repeat":"<svg class=\"tv-icon-repeat\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17 2l4 4l-4 4\"/><path d=\"M3 11v-1a4 4 0 0 1 4-4h14\"/><path d=\"M7 22l-4-4l4-4\"/><path d=\"M21 13v1a4 4 0 0 1-4 4H3\"/></svg>","maximize":"<svg class=\"tv-icon-maximize\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M4 8v-2a2 2 0 0 1 2 -2h2\" /> <path d=\"M4 16v2a2 2 0 0 0 2 2h2\" /> <path d=\"M16 4h2a2 2 0 0 1 2 2v2\" /> <path d=\"M16 20h2a2 2 0 0 0 2 -2v-2\" /> </svg>","list":"<svg class=\"tv-icon-list\" aria-hidden=\"true\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M9 6l11 0\" /> <path d=\"M9 12l11 0\" /> <path d=\"M9 18l11 0\" /> <path d=\"M5 6l0 .01\" /> <path d=\"M5 12l0 .01\" /> <path d=\"M5 18l0 .01\" /> </svg>"};
   var returning = /^#\/watch\//.test(location.hash) ? '#video' : /^#\/history(?:$|[/?])/.test(location.hash) ? '.hrow' : location.pathname === '/ui' ? '.card' : null;
   var lastHash = location.hash, timer, backDeadline=0, backPage='', searchEditing=null;
   var settingsLast=null, settingsColumn=0;
@@ -135,6 +135,17 @@
   function toggle() { var v=player(); if (v) { if(v.paused) v.play().catch(function(){}); else v.pause(); } showControls(); }
   function showControls() { var bar=document.querySelector('.tv-controls'); if(bar) {bar.hidden=false;scheduleHide();} }
   function step(n) { if (typeof W !== 'undefined' && W.step) W.step(n); }
+  function syncAutoNext(button) {
+    if(!button) return;
+    var enabled=typeof W!=='undefined' && W.auto!==false, text='自动下一集：'+(enabled?'开':'关');
+    button.setAttribute('aria-pressed',String(enabled));button.setAttribute('aria-label',text);button.title=text;
+    if(button._tvLabel) button._tvLabel.textContent=text;
+  }
+  function toggleAutoNext(button) {
+    if(typeof W==='undefined') return;
+    if(typeof W.toggleAuto==='function') W.toggleAuto(); else W.auto=!W.auto;
+    syncAutoNext(button);showControls();
+  }
   function closeEpisodes() {
     document.documentElement.classList.remove('tv-episodes-open');
     focus(player());
@@ -279,18 +290,19 @@
     var fill=document.createElement('div');fill.className='tv-progress-fill';track.appendChild(fill);timeline.appendChild(track);bar.appendChild(timeline);
     var buttons=document.createElement('div');buttons.className='tv-buttons';bar.appendChild(buttons);
     var primary=document.createElement('div');primary.className='tv-primary-controls';buttons.appendChild(primary);
-    [['上一集',function(){step(-1);},'player-skip-back'],['播放',toggle,'player-play'],['下一集',function(){step(1);},'player-skip-forward'],['全屏',fullscreen,'maximize'],['选集',openEpisodes,'list']].forEach(function(item,index){
+    [['上一集',function(){step(-1);},'player-skip-back'],['播放',toggle,'player-play'],['下一集',function(){step(1);},'player-skip-forward'],['自动下一集',toggleAutoNext,'repeat','auto'],['全屏',fullscreen,'maximize'],['选集',openEpisodes,'list']].forEach(function(item,index){
       if(index===3) {
         var clock=document.createElement('div');clock.className='tv-clock';clock.textContent='0:00 / 0:00';primary.appendChild(clock);
         var hint=document.createElement('div');hint.className='tv-seek-hint';hint.textContent='左右键调进度';primary.appendChild(hint);
       }
-      var b=document.createElement('button');b.className=index<3?'tv-icon-button':'tv-action-button';b.onclick=item[1];
+      var b=document.createElement('button');b.className=index<3?'tv-icon-button':'tv-action-button';b.onclick=function(){item[1](b);};
       b.setAttribute('aria-label',item[0]);b.title=item[0];b.innerHTML=icons[item[2]];
       if(index===1) {
         b.className+=' tv-play';b.innerHTML=icons['player-play']+icons['player-pause'];
         b.setAttribute('data-paused',String(v.paused));b.setAttribute('aria-label',v.paused?'播放':'暂停');b.title=v.paused?'播放':'暂停';
       }
-      if(index>=3) {var label=document.createElement('span');label.textContent=item[0];b.appendChild(label);}
+      if(index>=3) {var label=document.createElement('span');label.textContent=item[0];b._tvLabel=label;b.appendChild(label);}
+      if(item[3]==='auto') {b.className+=' tv-auto-next';syncAutoNext(b);}
       (index<3?primary:buttons).appendChild(b);
     });
     v.parentElement.appendChild(bar);
@@ -344,6 +356,7 @@
       if((el.hasAttribute('onclick')||el.classList.contains('chip'))&&!el.hasAttribute('role')&&!/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) el.setAttribute('role','button');
     });
     installControls(player());
+    syncAutoNext(document.querySelector('.tv-auto-next'));
     var hash=location.hash;
     if(hash!==lastHash) {
       settingsLast=null;settingsColumn=0;

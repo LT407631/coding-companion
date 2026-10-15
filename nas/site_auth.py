@@ -9,7 +9,7 @@ import time
 from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -159,7 +159,7 @@ class AuthMiddleware:
         peer = (scope.get("client") or ("", 0))[0]
         # Uvicorn runs with proxy_headers=False; this exemption is Docker-local only.
         local_health = path == "/healthz" and method in {"GET", "HEAD"} and peer in {"127.0.0.1", "::1"}
-        public = (path == "/login" and method in {"GET", "HEAD"}) or (path in {"/auth/login", "/auth/setup"} and method == "POST")
+        public = (path == "/login" and method in {"GET", "HEAD"}) or (path in {"/auth/login", "/auth/login-form", "/auth/setup"} and method == "POST")
         if not public and not local_health and not self.auth.valid(request.cookies.get(COOKIE)):
             if path in {"/", "/ui", "/phone-input"} and method in {"GET", "HEAD"}:
                 query = scope.get("query_string", b"").decode("ascii", errors="ignore")
@@ -176,8 +176,9 @@ class AuthMiddleware:
             if not origin or origin != expected:
                 await JSONResponse({"detail": "请从本站页面操作"}, status_code=403)(scope, receive, send)
                 return
-        if path in {"/auth/login", "/auth/setup"} and method == "POST":
-            if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        if path in {"/auth/login", "/auth/login-form", "/auth/setup"} and method == "POST":
+            expected_type = "application/x-www-form-urlencoded" if path == "/auth/login-form" else "application/json"
+            if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != expected_type:
                 await JSONResponse({"detail": "请求格式错误"}, status_code=415)(scope, receive, send)
                 return
             # Bound anonymous bodies even when Content-Length is absent/chunked.
@@ -219,9 +220,26 @@ class AuthMiddleware:
 def install_auth(app, auth, login_page):
     app.add_middleware(AuthMiddleware, auth=auth)
 
-    def signed_in(token, request):
-        response = JSONResponse({"ok": True})
+    def signed_in(token, request, response=None):
+        response = response or JSONResponse({"ok": True})
         response.set_cookie(COOKIE, token, max_age=SESSION_SECONDS, httponly=True, secure=request.url.scheme == "https", samesite="lax", path="/")
+        return response
+
+    def safe_next(value):
+        try:
+            target = urlsplit(value or "/ui")
+        except ValueError:
+            return "/ui"
+        if target.scheme or target.netloc or not target.path.startswith("/") or target.path.startswith("//"):
+            return "/ui"
+        if target.path not in {"/", "/ui", "/phone-input"}:
+            return "/ui"
+        return urlunsplit(("", "", target.path, target.query, ""))
+
+    def form_failure(target, error, retry_after=None):
+        response = RedirectResponse("/login?" + urlencode({"next": target, "error": error}), status_code=303)
+        if retry_after:
+            response.headers["Retry-After"] = retry_after
         return response
 
     @app.get("/login", include_in_schema=False)
@@ -246,6 +264,29 @@ def install_auth(app, auth, login_page):
         if not token:
             return JSONResponse({"detail": "密码不正确"}, status_code=401)
         return signed_in(token, request)
+
+    @app.post("/auth/login-form", include_in_schema=False)
+    async def login_form(request: Request):
+        try:
+            values = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True, max_num_fields=4)
+            password_values = values.get("password", [])
+            next_values = values.get("next", [])
+            if len(password_values) != 1 or len(next_values) > 1:
+                raise ValueError("invalid form")
+            password = password_values[0]
+            target = safe_next(next_values[0] if next_values else "/ui")
+        except (UnicodeDecodeError, ValueError):
+            return form_failure("/ui", "invalid")
+        if not 1 <= len(password) <= 256:
+            return form_failure(target, "invalid")
+        if not auth.permit_attempt(request.client.host):
+            return form_failure(target, "rate_limited", "60")
+        if not auth.configured():
+            return form_failure(target, "setup_required")
+        token = auth.login(password)
+        if not token:
+            return form_failure(target, "incorrect")
+        return signed_in(token, request, RedirectResponse(target, status_code=303))
 
     @app.post("/auth/logout", include_in_schema=False)
     def logout(request: Request):
