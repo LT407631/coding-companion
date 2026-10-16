@@ -10,10 +10,10 @@ const java=`class AudioSeekCheck {
  static class RedmiPlayback {static boolean applies(){return vendor;}}
  static class SystemClock {static long elapsedRealtime(){return 0;}}
  static class AudioTrack {int head;boolean released;AudioTrack(int h){head=h;}int getPlaybackHeadPosition(){if(released)throw new IllegalStateException();return head;}void pause(){}void flush(){if(!vendor)head=0;}void release(){released=true;}}
- static class MediaExtractor {static final int SEEK_TO_PREVIOUS_SYNC=0;long seek;void seekTo(long pts,int mode){seek=pts;}}
+ static class MediaExtractor {static final int SEEK_TO_PREVIOUS_SYNC=0;long seek;long getSampleTime(){return seek;}void seekTo(long pts,int mode){seek=pts;}}
  static class Codec {void flush(){}}
  AudioTrack audio,pending;Object audioInput=new Object();Codec codec=new Codec();MediaExtractor extractor=new MediaExtractor();
- int epoch=0,generation=1,target=3000,duration=30000,audioRate=48000;long audioBase=-1,audioEpoch=-1,wallPosition,wall,written;float speed=1;boolean playing=true,eos;void note(String value){}
+ int epoch=0,generation=1,target=3000,seekTarget,duration=30000,audioRate=48000;boolean landing,recovered;long inputMs;long audioBase=-1,audioEpoch=-1,wallPosition,wall,written;float speed=1;boolean playing=true,eos;void note(String value){}
  ${position}
  void reset(){AudioTrack track=audio;${reset}pending=track;}
  void firstSample(){audio=pending==null?new AudioTrack(0):pending;audioBase=target;audioEpoch=generation;}

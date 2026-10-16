@@ -186,15 +186,29 @@ final class TclHardwarePlayer extends MediaPlayer {
             .setTransferMode(AudioTrack.MODE_STREAM).build();
         track.setPlaybackParams(getPlaybackParams());return track;
     }
+    private MediaCodec audioCodec()throws IOException{
+        MediaCodec codec=MediaCodec.createDecoderByType(audioFormat.getString(MediaFormat.KEY_MIME));
+        try{codec.configure(audioFormat,null,null,0);codec.start();return codec;}
+        catch(RuntimeException e){codec.release();throw e;}
+    }
+    private MediaExtractor reopenAudio(MediaExtractor old)throws IOException{
+        old.release();MediaExtractor fresh=new MediaExtractor();
+        try{
+            fresh.setDataSource(input.address(),Collections.<String,String>emptyMap());
+            int index=track(fresh,"audio/");if(index<0)throw new IOException("Missing audio track");
+            fresh.selectTrack(index);audioInput=fresh;return fresh;
+        }catch(IOException|RuntimeException e){fresh.release();throw e;}
+    }
     private void audio(){
         MediaCodec codec=null;AudioTrack track=null;MediaExtractor extractor=audioInput;
         try{
-            codec=MediaCodec.createDecoderByType(audioFormat.getString(MediaFormat.KEY_MIME));codec.configure(audioFormat,null,null,0);codec.start();
-            MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int epoch=-1;boolean eos=false;long written=0;
+            codec=audioCodec();
+            MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int epoch=-1,seekTarget=0;boolean eos=false,landing=false,recovered=false;long written=0,inputMs=-1;
             while(!closed){
                 if(!awaitPlaying())break;
                 if(epoch!=generation){
-                    if(epoch>=0)codec.flush();epoch=generation;extractor.seekTo(target*1000L,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);eos=false;written=0;audioBase=-1;
+                    if(epoch>=0)codec.flush();epoch=generation;seekTarget=target;extractor.seekTo(seekTarget*1000L,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);eos=false;written=0;audioBase=-1;
+                    landing=RedmiPlayback.applies()&&epoch>0;recovered=false;inputMs=extractor.getSampleTime()/1000;
                     if(track!=null){
                         track.pause();
                         if(RedmiPlayback.applies()){
@@ -211,7 +225,22 @@ final class TclHardwarePlayer extends MediaPlayer {
                 }
                 if(output<0)continue;
                 boolean end=(info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;
-                if(info.size>0&&info.presentationTimeUs/1000>=target&&epoch==generation){
+                if(info.size>0&&info.presentationTimeUs/1000>=seekTarget&&epoch==generation){
+                    if(landing){
+                        long outputMs=info.presentationTimeUs/1000;
+                        note("decoder-audio-land,generation="+epoch+",targetMs="+seekTarget+",inputMs="+inputMs+",outputMs="+outputMs+",method="+(recovered?"cold-reopen":"flush"));
+                        if(outputMs-seekTarget>500){
+                            if(recovered)throw new IOException("Audio seek did not land");
+                            // Some OEM audio pipelines retain pre-seek samples after flush.
+                            // Reopen only after proving the first PCM is at the wrong time.
+                            codec.release();codec=null;
+                            audio=null;if(track!=null){track.pause();track.release();track=null;}
+                            MediaExtractor previous=extractor;extractor=null;extractor=reopenAudio(previous);extractor.seekTo(seekTarget*1000L,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                            inputMs=extractor.getSampleTime()/1000;codec=audioCodec();
+                            audioBase=-1;audioEpoch=-1;written=0;eos=false;recovered=true;continue;
+                        }
+                        landing=false;
+                    }
                     if(track==null){track=sink(codec.getOutputFormat());audio=track;}
                     ByteBuffer buffer=codec.getOutputBuffer(output);buffer.position(info.offset);buffer.limit(info.offset+info.size);
                     if(audioBase<0){audioBase=info.presentationTimeUs/1000;audioEpoch=epoch;}
@@ -232,7 +261,7 @@ final class TclHardwarePlayer extends MediaPlayer {
                 }
             }
         }catch(Exception e){if(!closed){note("decoder-audio-error,type="+e.getClass().getSimpleName()+(e instanceof MediaCodec.CodecException?",code="+((MediaCodec.CodecException)e).getDiagnosticInfo():""));error();}}
-        finally{audio=null;if(track!=null)track.release();if(codec!=null)codec.release();extractor.release();}
+        finally{audio=null;if(track!=null)track.release();if(codec!=null)codec.release();if(extractor!=null)extractor.release();}
     }
     private synchronized void completeIfEnded(){
         if(!closed&&videoDone&&audioDone&&!completionReported){completionReported=true;playing=false;post(()->{if(completionListener!=null)completionListener.onCompletion(this);});}
