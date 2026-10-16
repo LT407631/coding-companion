@@ -83,20 +83,26 @@ class Library:
         return self.cache.refresh(key, warm)
 
     def random_item(self, genre, order, theme='', exclude=()):
-        """Choose from three real catalogue pages without inventing titles."""
+        return self.random_items(genre, order, theme, exclude, 1)[0]
+
+    def random_items(self, genre, order, theme='', exclude=(), count=1):
+        """Choose unique items from three real catalogue pages without inventing titles."""
         blocked = {str(value) for value in exclude}
-        cursor, candidates = '', []
+        cursor, candidates, seen = '', [], set()
         for _ in range(3):
             entry, _ = self.page(genre, order, theme, cursor)
             page = json.loads(entry.body)
-            candidates.extend(item for item in page.get('items', [])
-                              if str(item.get('series_id', '')) not in blocked)
+            for item in page.get('items', []):
+                sid = str(item.get('series_id', ''))
+                if sid not in blocked and sid not in seen:
+                    candidates.append(item)
+                    seen.add(sid)
             cursor = page.get('next_cursor') or ''
             if not page.get('has_more') or not cursor:
                 break
         if not candidates:
             raise HTTPException(404, '当前筛选范围暂时没有新的随机剧集')
-        return secrets.choice(candidates)
+        return secrets.SystemRandom().sample(candidates, min(max(1, int(count)), len(candidates)))
 
     def _read(self, params, state):
         h = self.source
@@ -153,6 +159,7 @@ class RandomRequest(BaseModel):
     order: Literal['latest', 'hot'] = 'latest'
     theme: str = Field(default='', max_length=80)
     exclude: list[str] = Field(default_factory=list, max_length=300)
+    count: int = Field(default=1, ge=1, le=10)
 
 
 def install_library(app, source, cache):
@@ -175,8 +182,8 @@ def install_library(app, source, cache):
     def random_library(body: RandomRequest):
         if any(not re.fullmatch(r'\d{1,24}', str(value)) for value in body.exclude):
             raise HTTPException(400, '随机排除列表无效')
-        item = library.random_item(body.genre, body.order, body.theme, body.exclude)
-        return Response(json_bytes({'item': item}), media_type='application/json',
+        items = library.random_items(body.genre, body.order, body.theme, body.exclude, body.count)
+        return Response(json_bytes({'item': items[0], 'items': items}), media_type='application/json',
                         headers={'Cache-Control': 'no-store'})
 
     return library

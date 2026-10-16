@@ -248,6 +248,7 @@ class PrepareRequest(BaseModel):
     completed: int = Field(default=0, ge=0, le=10000)
     retry: bool = False
     preview: bool = False
+    background: bool = False
 
 
 class CloseRequest(BaseModel):
@@ -291,7 +292,8 @@ def save_cache_settings(settings: CacheSettings):
 def prepare(body: PrepareRequest):
     try:
         _, eps = server.H.get_episodes(body.series_id)
-        return playback.prepare(body.client, body.series_id, eps, body.ep, body.completed, body.retry, body.preview)
+        return playback.prepare(body.client, body.series_id, eps, body.ep, body.completed, body.retry,
+                                body.preview, body.background)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:

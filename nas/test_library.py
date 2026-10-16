@@ -167,6 +167,14 @@ class LibraryTests(unittest.TestCase):
             self.library.random_item('comic_series', 'latest', '', blocked + ['54'])
         self.assertEqual(caught.exception.status_code, 404)
 
+    def test_random_batch_returns_ten_unique_real_items(self):
+        items = self.library.random_items('comic_series', 'latest', '', [str(value) for value in range(1, 7)], 10)
+        ids = [item['series_id'] for item in items]
+        self.assertEqual(len(ids), 10)
+        self.assertEqual(len(set(ids)), 10)
+        self.assertFalse(set(ids).intersection({str(value) for value in range(1, 7)}))
+        self.assertEqual(len(self.source.calls), 3)
+
     def test_prefetch_never_blocks_foreground_and_coalesces_requests(self):
         first, _ = self.library.page('comic_series', 'latest')
         original = self.source.api

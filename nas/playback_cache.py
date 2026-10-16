@@ -218,8 +218,9 @@ class PlaybackCache:
                 for p in self.root.glob(vid + ".work*"):
                     p.unlink(missing_ok=True)
 
-    def prepare(self, client, sid, eps, ep, completed=0, retry=False, preview=False):
+    def prepare(self, client, sid, eps, ep, completed=0, retry=False, preview=False, background=False):
         with self.guard:
+            background = bool(background and preview)
             self.closed = {k: t for k, t in self.closed.items() if t > time.monotonic()}
             if client in self.closed:
                 return self.status(sid, ep)
@@ -239,8 +240,10 @@ class PlaybackCache:
             paused = same and previous.get("cache_paused", False) and not retry
             ended = same and previous.get("ended", False) and not retry
             wanted = {n for n in by_ep if ep <= n <= ep + (0 if paused else count) and not (ended and n == ep)}
-            self.sessions[client] = {"sid": sid, "ep": ep, "wanted": wanted, "until": time.monotonic() + 60,
-                                     "cache_paused": paused, "ended": ended, "preview": bool(preview)}
+            self.sessions[client] = {"sid": sid, "ep": ep, "wanted": wanted,
+                                     "until": time.monotonic() + (600 if background else 60),
+                                     "cache_paused": paused, "ended": ended, "preview": bool(preview),
+                                     "background": background}
             active = list(self._active())
             # Discard obsolete waiting jobs; an in-progress preparation can finish safely.
             self.jobs = {k: v for k, v in self.jobs.items() if any(s["sid"] == k[0] and k[1] in s["wanted"] for s in active)}
@@ -251,15 +254,19 @@ class PlaybackCache:
                 if self._ready(self.path(by_ep[n])):
                     self.results[key] = {"state": "ready"}
                     continue
-                state = self.results.get(key, {}).get("state")
+                previous_result = self.results.get(key, {})
+                state = previous_result.get("state")
+                if not background and n == ep and state == "error" and previous_result.get("background"):
+                    self.results.pop(key, None)
+                    state = None
                 if state == "working" or (state == "error" and not (retry and n == ep)):
                     continue
-                priority = 0 if n == ep else (2 if full else 1)
+                priority = 2 if background else (0 if n == ep else (2 if full else 1))
                 self.serial += 1
                 job = (priority, self.serial, by_ep[n])
                 if key not in self.jobs or priority < self.jobs[key][0]:
                     self.jobs[key] = job
-                self.results[key] = {"state": "queued"}
+                self.results[key] = {"state": "queued", "background": background}
             self.guard.notify_all()
             return self.status(sid, ep)
 
@@ -277,7 +284,8 @@ class PlaybackCache:
                 priority, _, vid = self.jobs.pop(key)
                 self.inflight[key] = vid
                 generation = self.generation
-                self.results[key] = {"state": "working"}
+                background = bool(self.results.get(key, {}).get("background"))
+                self.results[key] = {"state": "working", "background": background}
                 following = sorted((k for k in self.jobs if k[0] == key[0] and k[1] > key[1]), key=lambda k: k[1])
                 batch = [vid] + [self.jobs[k][2] for k in following[:4]]
             try:
@@ -289,9 +297,9 @@ class PlaybackCache:
                     except Exception:
                         pass  # Direct build still resolves current track on demand.
                 self.ensure(vid, foreground=priority == 0, generation=generation)
-                result = {"state": "ready"}
+                result = {"state": "ready", "background": background}
             except Exception as exc:
-                result = {"state": "error", "message": str(exc)}
+                result = {"state": "error", "message": str(exc), "background": background}
             with self.guard:
                 if generation == self.generation or key in self.jobs:
                     self.results[key] = result

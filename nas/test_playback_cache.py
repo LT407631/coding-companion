@@ -2,6 +2,7 @@ import ast
 import asyncio
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -103,6 +104,23 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(status['queued'], 1)
         self.assertEqual(self.c.sessions['preview-user']['wanted'], {3})
         self.assertTrue(self.c.sessions['preview-user']['preview'])
+
+    def test_random_pool_background_is_low_priority_and_foreground_upgrades_it(self):
+        self.c.prepare('pool-user', '2001', EPS, 3, preview=True, background=True)
+        self.assertEqual(self.c.jobs[('2001', 3)][0], 2)
+        self.assertTrue(self.c.sessions['pool-user']['background'])
+        self.assertGreater(self.c.sessions['pool-user']['until'] - time.monotonic(), 500)
+        self.c.prepare('viewer-one', '2001', EPS, 3, preview=True)
+        self.assertEqual(self.c.jobs[('2001', 3)][0], 0)
+        self.assertFalse(self.c.results[('2001', 3)]['background'])
+
+    def test_foreground_retries_a_failed_background_preview_only(self):
+        self.c.prepare('pool-user', '2001', EPS, 2, preview=True, background=True)
+        self.c.jobs.pop(('2001', 2))
+        self.c.results[('2001', 2)] = {'state': 'error', 'background': True}
+        self.c.prepare('viewer-one', '2001', EPS, 2, preview=True)
+        self.assertEqual(self.c.results[('2001', 2)]['state'], 'queued')
+        self.assertEqual(self.c.jobs[('2001', 2)][0], 0)
 
     def test_settings_and_series_persist(self):
         self.c.configure({**self.c.settings, 'ahead': 3, 'mode': 'full'})
