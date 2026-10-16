@@ -305,6 +305,10 @@
   .watch-heading .wt { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .watch-actions { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
   .watch-actions button { padding: 7px 10px; font-size: 12px; }
+  .quality-row { display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; color: var(--txt2); font-size: 12px; }
+  .quality-row label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .quality-row select { min-width: 116px; height: 34px; padding: 0 8px; color: var(--txt); background: var(--control); border: 1px solid var(--line); border-radius: 8px; font: inherit; cursor: pointer; }
+  .quality-actual { min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .autoc { color: var(--txt); background: var(--control); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
   .autoc.on { color: var(--pink); background: var(--pink-soft); border-color: var(--pink-border); }
   @media (max-width: 640px) {
@@ -312,6 +316,7 @@
     .watch-toggle { order: 2; }
     .watch .epdrawer { width: 220px; max-width: 55%; }
     .watch-actions { flex-wrap: wrap; }
+    .quality-row { flex-wrap: wrap; }
   }
   .epdrawer {
     width: 292px; flex: none; background: var(--surface); display: flex; flex-direction: column;
@@ -849,7 +854,18 @@ async function vDetail(sid) {
 }
 
 /* ================= 视图: 播放 ================= */
-const W = { sid: null, eps: [], meta: null, ep: 1, auto: true, speed: 1, saveT: null };
+const PLAYBACK_QUALITIES = ['auto', '1080p', '720p', '540p', '480p', '360p'];
+function playbackQualityOptions(selected) {
+  return PLAYBACK_QUALITIES.map(value => `<option value="${value}"${value === selected ? ' selected' : ''}>${value === 'auto' ? '自动（默认最高）' : value + ' 上限'}</option>`).join('');
+}
+function actualPlaybackQuality(video) {
+  const width = Number(video.videoWidth) || 0, height = Number(video.videoHeight) || 0;
+  if (!width || !height) return '当前：检测中';
+  const short = Math.min(width, height), tier = [1080, 720, 540, 480, 360].find(value => short >= value);
+  return `当前：${tier ? tier + 'p · ' : ''}${width}×${height}`;
+}
+const W = { sid: null, eps: [], meta: null, ep: 1, auto: true, speed: 1, saveT: null,
+  quality: 'auto', qualityValues: PLAYBACK_QUALITIES, actualQualityLabel: '当前：检测中' };
 async function vWatch(sid, ep, resumeAt) {
   renderGtabs(true);
   const el = $('#view');
@@ -889,6 +905,9 @@ async function vWatch(sid, ep, resumeAt) {
         <button class="autoc ${W.auto?'on':''}" id="autoc" onclick="W.toggleAuto()" aria-pressed="${W.auto}">自动连播</button>
         <button class="ghost" id="next-season" type="button" hidden>下一季</button>
       </div>
+      <div class="quality-row"><label for="quality-select">清晰度
+        <select id="quality-select" aria-label="播放清晰度">${playbackQualityOptions(W.quality)}</select></label>
+        <span class="quality-actual" id="quality-actual">${W.actualQualityLabel}</span></div>
       <div class="dh">选集（${eps.length}）</div><div class="note" id="cache-progress" style="padding:0 18px 12px">正在连接缓存队列…</div>
       <div class="dlist">
         ${eps.map(e => `<div class="ditem ${e.index===W.ep?'cur':''}" data-ep="${e.index}" onclick="W.load(${e.index})">
@@ -932,8 +951,28 @@ W.bind = () => {
   W.deviceError = null; W.device = null;
   W.mode = typeof DeviceMedia !== 'undefined' ? DeviceMedia.mode() :
     (typeof location !== 'undefined' && !/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname) ? 'device' : 'nas');
+  if (W.quality !== 'auto') W.mode = 'nas';
   let mediaRetry = 0, pollFailures = 0, pollFailureAt = 0;
-  const client = W.client, transition = window.CodingWebTransition && !window.CodingTVTransition && !v._tvNative && !document.documentElement?.classList.contains('coding-tv') ? window.CodingWebTransition.create(W, v, $('#vload')) : null;
+  const client = W.client;
+  let transition = null;
+  W.refreshQuality = () => {
+    W.actualQualityLabel = actualPlaybackQuality(v);
+    const label = $('#quality-actual'); if (label) label.textContent = W.actualQualityLabel;
+    transition?.quality();
+  };
+  W.setQuality = value => {
+    value = PLAYBACK_QUALITIES.includes(value) ? value : 'auto';
+    if (value === W.quality) return;
+    W.quality = value;
+    const select = $('#quality-select'); if (select) select.value = value;
+    if (value !== 'auto' && W.mode === 'device') {
+      W.device?.stop(); W.device = null; W.mode = 'nas';
+    }
+    W.load(W.ep, false, false, false, true);
+    toast(value === 'auto' ? '已恢复自动最高画质' : `已设为 ${value} 上限，无资源时自动降低`, 1800);
+  };
+  $('#quality-select').addEventListener('change', event => W.setQuality(event.target.value));
+  transition = window.CodingWebTransition && !window.CodingTVTransition && !v._tvNative && !document.documentElement?.classList.contains('coding-tv') ? window.CodingWebTransition.create(W, v, $('#vload')) : null;
   const post = async (path, body) => {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 30000);
     try {
@@ -965,7 +1004,7 @@ W.bind = () => {
       if (W.activeEp === n) return;
       W.activeEp = n;
       $('#vtip').textContent = `第${n}集已准备好，正在加载画面`;
-      v.src = W.mode === 'device' ? status.url : `/stream?series_id=${W.sid}&ep=${n}`;
+      v.src = W.mode === 'device' ? status.url : `/stream?series_id=${W.sid}&ep=${n}&quality=${encodeURIComponent(W.quality)}`;
       v.load();
     } else if (status.state === 'error') {
       fail(status.message || '本集准备失败，请重试');
@@ -990,16 +1029,20 @@ W.bind = () => {
     const prepare = async () => update(await post('/playback/prepare', body), n, token);
     return window.CodingTVTransition ? CodingTVTransition.run(W, prepare) : prepare();
   };
-  W.load = (n, first = false, retry = false, automatic = false) => {
+  W.load = (n, first = false, retry = false, automatic = false, qualityChange = false) => {
     if (n < 1 || n > W.eps.length) return;
-    if (n === W.ep && !first && !automatic) retry = true;
+    if (n === W.ep && !first && !automatic && !qualityChange) retry = true;
     if (!W.alive) { go(`#/watch/${W.sid}/${n}`); return; }
+    const qualityPosition = qualityChange && Number.isFinite(v.currentTime) ? v.currentTime : 0;
     W.save();
     const rec = hist.get(W.sid);
-    W.resumePos = first && W.resumeAt !== undefined ? Math.max(0, Number(W.resumeAt) || 0) :
+    W.resumePos = qualityChange ? qualityPosition : first && W.resumeAt !== undefined ? Math.max(0, Number(W.resumeAt) || 0) :
       (first || retry) && rec && Number(rec.ep) === n && !rec.finished ? Math.max(0, Number(rec.pos) || 0) : 0;
     W.mediaReady = false; W.metadataReady = false; W.finished = false; W.saveT = null;
-    if (!automatic && !retry) W.completed = 0;
+    W.actualQualityLabel = '当前：检测中';
+    const qualityLabel = $('#quality-actual'); if (qualityLabel) qualityLabel.textContent = W.actualQualityLabel;
+    transition?.quality();
+    if (!automatic && !retry && !qualityChange) W.completed = 0;
     if (!retry) mediaRetry = 0;
     transition?.switching(automatic);
     v.pause(); v.removeAttribute('src'); v.load();
@@ -1067,6 +1110,7 @@ W.bind = () => {
   v.addEventListener('loadedmetadata', () => {
     if (!W.alive || W.client !== client || W.activeEp !== W.ep || !v.getAttribute('src')) return;
     W.metadataReady = true;
+    W.refreshQuality();
     v.playbackRate = W.speed;
     const pos = Number.isFinite(v.duration) && W.resumePos < v.duration ? W.resumePos : 0;
     W.mediaReady = pos === 0 || Math.abs(v.currentTime - pos) < 0.1;
@@ -1128,7 +1172,7 @@ W.save = finished => {
              ep: W.ep, epCnt: W.eps.length, pos: Math.min(pos, dur), dur, finished: !!finished });
   if (finished) W.finished = true;
 };
-W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility','nextSeason']) delete W[key]; };
+W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility','nextSeason','setQuality','refreshQuality']) delete W[key]; };
 /* ================= 视图: 收藏 ================= */
 async function vFav() {
   renderGtabs(true); await CodingWatchState.ready(); if (location.hash !== '#/fav') return;

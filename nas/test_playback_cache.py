@@ -57,6 +57,21 @@ class CacheTests(unittest.TestCase):
         self.assertFalse(c.path('1001').exists())
         self.assertEqual(list(c.root.iterdir()), [])
 
+    def test_manual_quality_has_an_independent_bounded_cache_key(self):
+        auto = self.c.ensure('1001')
+        manual = self.c.ensure('1001q720')
+        self.assertNotEqual(auto, manual)
+        self.assertEqual(self.calls, ['1001', '1001q720'])
+        self.assertEqual(manual.name, '1001q720_best.mp4')
+        with self.assertRaisesRegex(ValueError, '视频编号无效'):
+            self.c.path('1001q2160')
+
+    def test_clear_all_removes_manual_quality_cache(self):
+        path = self.c.ensure('1001q480')
+        self.assertTrue(path.exists())
+        self.c.clear_all()
+        self.assertFalse(path.exists())
+
     def test_old_corrupt_cache_is_rebuilt_and_good_cache_reused(self):
         self.c.path('1001').write_bytes(b'partial')
         self.c.ensure('1001'); self.c.ensure('1001')
@@ -269,7 +284,8 @@ class CacheTests(unittest.TestCase):
         class Provider:
             def get_video_tracks(self, vids, force=False):
                 calls.append(list(vids))
-                return {v: [{'main_url': 'test:' + v, 'video_meta': {'size': 100}}] for v in vids}
+                return {v: [{'main_url': 'test:' + v,
+                             'video_meta': {'size': 100, 'definition': '1080p'}}] for v in vids}
         source = MediaSource(Provider())
         def build(vid, stage):
             self.assertEqual(source.track(vid)['url'], 'test:' + vid)

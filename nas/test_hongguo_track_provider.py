@@ -89,7 +89,7 @@ class ProviderTests(unittest.TestCase):
             provider.get_video_tracks(['123'])
         self.assertEqual(legacy.calls, [])
 
-    def test_prefers_1080_even_if_720_file_is_larger(self):
+    def test_returns_all_actual_quality_steps_in_descending_order(self):
         tracks = [
             {'main_url': 'https://media.test/720', 'video_meta': {'definition': '720p', 'codec_type': 'hevc', 'size': 900, 'vwidth': 1280, 'vheight': 720}},
             {'main_url': 'https://media.test/1080', 'video_meta': {'definition': '1080p', 'codec_type': 'hevc', 'size': 500, 'vwidth': 1920, 'vheight': 1080}},
@@ -97,7 +97,8 @@ class ProviderTests(unittest.TestCase):
         ]
         provider = self.provider([{'code': 0, 'data': {'123': {'video_model': {'video_list': tracks}}}}])
         result = provider.get_video_tracks(['123'])['123']
-        self.assertEqual([t['main_url'] for t in result], ['https://media.test/1080'])
+        self.assertEqual([t['main_url'] for t in result],
+                         ['https://media.test/1080', 'https://media.test/720'])
 
     def test_mislabeled_1080_is_reported_as_actual_720(self):
         track = {'main_url': 'https://media.test/native', 'video_meta': {
@@ -115,7 +116,7 @@ class ProviderTests(unittest.TestCase):
         provider = self.provider([], Legacy())
         self.assertEqual(provider.get_episodes("456"), ({"series_id": "456"}, []))
 
-    def test_preload_flat_encryption_metadata_survives_and_low_quality_is_excluded(self):
+    def test_preload_flat_encryption_metadata_survives_and_fallback_is_retained(self):
         hd = {"definition": "720p", "codec_type": "hevc", "vwidth": 1280, "vheight": 720,
               "size": 500, "main_url": "https://media.test/720", "encrypt": 1,
               "spade_a": "fixture-key", "backup_url_1": "https://mirror.test/720"}
@@ -124,19 +125,21 @@ class ProviderTests(unittest.TestCase):
         provider = self.provider([{"code": 0, "data": {"123": {"video_model":
             json.dumps({"video_list": {"video_1": low, "video_2": hd, "video_3": mislabeled}})}}}])
         tracks = provider.get_video_tracks(["123"])["123"]
-        self.assertEqual(len(tracks), 1)
+        self.assertEqual([t['video_meta']['definition'] for t in tracks], ['720p', '360p', '360p'])
         from media_source import MediaSource
         selected = MediaSource._best(tracks)
         self.assertEqual(selected["definition"], "720p")
+        self.assertEqual([t['definition'] for t in selected['fallbacks']], ['360p'])
         self.assertTrue(selected["encrypt"])
         self.assertEqual(selected["spade_a"], "fixture-key")
         self.assertEqual(selected["urls"], [hd["main_url"], hd["backup_url_1"]])
 
-    def test_low_quality_only_is_error_without_old_source_or_downgrade(self):
+    def test_low_quality_is_used_without_switching_source(self):
         provider = self.provider([{"code": 0, "data": {"123": {"video_model": {
-            "video_list": [{"definition": "360p", "main_url": "https://media.test/low"}]}}}}])
-        with self.assertRaisesRegex(HongguoSourceError, "没有可用的720p/1080p"):
-            provider.get_video_tracks(["123"])
+            "video_list": [{"definition": "1080p", "codec_type": "hevc", "vwidth": 910,
+                            "vheight": 512, "main_url": "https://media.test/low"}]}}}}])
+        tracks = provider.get_video_tracks(["123"])["123"]
+        self.assertEqual(tracks[0]['video_meta']['definition'], '480p')
         self.assertEqual(len(provider.session.calls), 1)
         self.assertEqual(provider.legacy.calls, [])
 

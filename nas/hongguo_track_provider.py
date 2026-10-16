@@ -1,4 +1,4 @@
-"""One fixed HD video API; failed legacy APIs are never retried as fallbacks."""
+"""One fixed video API; failed legacy APIs are never retried as fallbacks."""
 import base64
 import json
 import os
@@ -48,6 +48,7 @@ def download_with_fallback(urls, path, request, timeout=(3, 20)):
 class HongguoTrackProvider:
     BASE_URL = "https://api5-normal-sinfonlineb.fqnovel.com"
     MODEL_URL = BASE_URL + '/novel/player/multi_video_model/v1/'
+    QUALITY_STEPS = (1080, 720, 540, 480, 360)
 
     def __init__(self, legacy, session=None, min_interval=.25, signer=None):
         self.legacy = legacy
@@ -78,7 +79,7 @@ class HongguoTrackProvider:
                 raise ValueError('invalid signing target')
             return signed
         except Exception as exc:
-            raise HongguoSourceError('本地高清签名暂不可用；未切换旧接口或低清源') from exc
+            raise HongguoSourceError('本地取流签名暂不可用；未切换旧接口或第三方源') from exc
 
     @staticmethod
     def _media_urls(track):
@@ -118,14 +119,14 @@ class HongguoTrackProvider:
                     headers=signed['headers'], timeout=(3, 12))
                 response.raise_for_status()
                 if not response.content:
-                    raise HongguoSourceError('高清取流接口返回空响应；未回退旧接口或低清源，请稍后重试')
+                    raise HongguoSourceError('固定取流接口返回空响应；未回退旧接口或第三方源，请稍后重试')
                 result = response.json()
                 if not isinstance(result, dict):
                     raise ValueError('invalid model response')
             except HongguoSourceError:
                 raise
             except Exception as exc:
-                raise HongguoSourceError("高清取流接口响应失败；未回退旧接口或低清源，请稍后重试") from exc
+                raise HongguoSourceError("固定取流接口响应失败；未回退旧接口或第三方源，请稍后重试") from exc
             finally:
                 if response is not None:
                     response.close()
@@ -151,17 +152,20 @@ class HongguoTrackProvider:
             if not isinstance(track, dict):
                 continue
             meta = track.get("video_meta") or track
-            if str(meta.get("definition", "")).lower() not in ("720p", "1080p"):
-                continue
             if str(meta.get('codec_type', '')).lower() not in ('h264', 'avc', 'avc1', 'h265', 'hevc', 'hvc1', 'hev1', 'bytevc1'):
                 continue
             try:
                 dimensions = [int(meta.get(name) or 0) for name in ("vwidth", "vheight")]
             except (ValueError, TypeError):
                 continue
-            if not all(dimensions) or min(dimensions) < 720:
+            if not all(dimensions):
                 continue
-            definition = '1080p' if min(dimensions) >= 1080 else '720p'
+            short_side = min(dimensions)
+            actual = next((quality for quality in self.QUALITY_STEPS
+                           if short_side >= quality), None)
+            if actual is None:
+                continue
+            definition = f'{actual}p'
             addresses = self._media_urls(track)
             if addresses:
                 normalized.append({**track, "main_url": addresses[0],
@@ -172,9 +176,11 @@ class HongguoTrackProvider:
                                    "encrypt_info": track.get("encrypt_info") or {
                                        "encrypt": bool(track.get("encrypt")), "spade_a": track.get("spade_a")}})
         if not normalized:
-            raise HongguoSourceError("当前固定播放源没有可用的720p/1080p轨道；未切换旧接口或低清源")
-        best = max(int(t['video_meta']['definition'][:-1]) for t in normalized)
-        return [t for t in normalized if int(t['video_meta']['definition'][:-1]) == best]
+            raise HongguoSourceError("当前固定播放源没有可用的视频轨道；未切换旧接口或第三方源")
+        return sorted(normalized,
+                      key=lambda t: (int(t['video_meta']['definition'][:-1]),
+                                     int(t['video_meta'].get('size') or 0)),
+                      reverse=True)
 
     def get_video_tracks(self, vids, force=False):
         output, failures = {}, {}

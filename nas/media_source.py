@@ -33,21 +33,40 @@ class MediaSource:
     def _best(options):
         if not options:
             raise PermanentSourceError("暂时没有可播放的视频轨道")
-        # Same selection as offline_dl._pick_track(..., 'best').
-        selected = max(options, key=lambda t: (t.get("video_meta") or {}).get("size", 0) or 0)
-        meta = selected.get("video_meta") or {}
-        encrypt = selected.get("encrypt_info") or {}
-        if not selected.get("main_url"):
-            raise PermanentSourceError("视频轨道未提供下载地址")
-        if encrypt.get("encrypt") and not encrypt.get("spade_a"):
-            raise PermanentSourceError("加密轨道未提供解密信息")
-        # Keep mirrors attached to the selected quality; the downloader can fail over
-        # without changing encryption metadata or selecting another definition.
-        urls = list(dict.fromkeys(selected.get("coding_urls") or [selected["main_url"]]))
-        return {"url": selected["main_url"], "urls": urls,
-                "encrypt": bool(encrypt.get("encrypt")),
-                "spade_a": encrypt.get("spade_a"), "size": meta.get("size", 0),
-                "definition": meta.get("definition") or ""}
+        by_quality = {}
+        for selected in options:
+            meta = selected.get("video_meta") or {}
+            definition = str(meta.get("definition") or "")
+            try:
+                quality = int(definition.removesuffix("p"))
+            except ValueError:
+                continue
+            encrypt = selected.get("encrypt_info") or {}
+            if not selected.get("main_url") or (encrypt.get("encrypt") and not encrypt.get("spade_a")):
+                continue
+            urls = list(dict.fromkeys(selected.get("coding_urls") or [selected["main_url"]]))
+            candidate = {"url": selected["main_url"], "urls": urls,
+                         "encrypt": bool(encrypt.get("encrypt")),
+                         "spade_a": encrypt.get("spade_a"), "size": meta.get("size", 0),
+                         "definition": definition}
+            previous = by_quality.get(quality)
+            if previous is None or int(candidate["size"] or 0) > int(previous["size"] or 0):
+                by_quality[quality] = candidate
+        if not by_quality:
+            raise PermanentSourceError("视频轨道缺少可用的下载或解密信息")
+        ordered = [by_quality[quality] for quality in sorted(by_quality, reverse=True)]
+        return {**ordered[0], "fallbacks": ordered[1:]}
+
+    @staticmethod
+    def _limited(track, max_quality):
+        if max_quality is None:
+            return track
+        candidates = [track, *track.get("fallbacks", [])]
+        allowed = [candidate for candidate in candidates
+                   if int(str(candidate.get("definition", "0p")).removesuffix("p") or 0) <= int(max_quality)]
+        if not allowed:
+            raise PermanentSourceError(f"没有不高于 {max_quality}p 的可播放视频轨道")
+        return {**allowed[0], "fallbacks": [dict(candidate) for candidate in allowed[1:]]}
 
     def _fresh(self, vid):
         item = self.cache.get(vid)
@@ -124,13 +143,13 @@ class MediaSource:
         waiting.update({v: f for v, (f, _) in claimed.items()})
         return waiting
 
-    def track(self, vid):
+    def track(self, vid, max_quality=None):
         vid = str(vid)
         while True:
             with self.guard:
                 cached = self._fresh(vid)
                 if cached is not None:
-                    return cached
+                    return self._limited(cached, max_quality)
             flights = self._fetch([vid])
             flight = flights.get(vid)
             if flight is None:
@@ -143,7 +162,7 @@ class MediaSource:
                 continue
             if flight.error:
                 raise flight.error
-            return dict(flight.track)
+            return self._limited(dict(flight.track), max_quality)
 
     def prefetch(self, vids):
         # Best effort: current playback falls back to track() independently.

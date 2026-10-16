@@ -43,6 +43,25 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn('background:#f5f6f8;background:var(--bg)', login)
         self.assertIn('color:#1f2129;color:var(--text)', login)
 
+    def test_playback_quality_selector_defaults_high_and_reports_actual_dimensions(self):
+        web = Path(__file__).with_name('web')
+        page = web.joinpath('app.html').read_text()
+        controls = web.joinpath('assets', 'playback-status.js').read_text()
+        server = Path(__file__).with_name('nas_server.py').read_text()
+        self.assertIn("['auto', '1080p', '720p', '540p', '480p', '360p']", page)
+        self.assertIn('自动（默认最高）', page)
+        self.assertIn("quality: 'auto'", page)
+        self.assertNotIn('coding_playback_quality_v1', page)
+        self.assertIn('actualPlaybackQuality', page)
+        self.assertIn('video.videoWidth', page)
+        self.assertIn('video.videoHeight', page)
+        self.assertIn('&quality=${encodeURIComponent(W.quality)}', page)
+        self.assertIn("value === 'auto' ? '自动（默认最高）'", controls)
+        self.assertIn('w.actualQualityLabel', controls)
+        self.assertLess(page.index('W.setQuality ='), page.index('CodingWebTransition.create(W'))
+        self.assertIn('quality: str = Query("auto"', server)
+        self.assertIn('vid + "q" + quality.removesuffix("p")', server)
+
 
 if __name__ == '__main__':
     unittest.main()

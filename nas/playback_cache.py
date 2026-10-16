@@ -6,11 +6,13 @@ import shutil
 import subprocess
 import threading
 import time
+import re
 from media_source import PermanentSourceError
 from source_requests import SourceUnavailable
 
 DEFAULTS = {"mode": "ahead", "ahead": 5, "smart_after": 3, "cleanup": True, "cleanup_previous": False, "limit_gb": 20}
 MODES = {"off", "ahead", "full", "smart"}
+CACHE_ID = re.compile(r"^\d{1,24}(?:q(?:1080|720|540|480|360))?$")
 
 
 def validate_media(path):
@@ -66,7 +68,7 @@ class PlaybackCache:
             state = {}
         self.settings = {**DEFAULTS, **state.get("settings", {})}
         self.series = state.get("series", {})
-        self.pending_vids = {str(v) for v in state.get("pending_vids", []) if str(v).isdigit() and len(str(v)) <= 24}
+        self.pending_vids = {str(v) for v in state.get("pending_vids", []) if CACHE_ID.fullmatch(str(v))}
         self.pending_cleanup = set(state.get("pending_cleanup", []))
         # Only our unfinished staging files are disposable after a restart.
         for p in self.root.glob("*.work*"):
@@ -97,7 +99,7 @@ class PlaybackCache:
             return dict(result)
 
     def path(self, vid):
-        if not str(vid).isdigit() or len(str(vid)) > 24:
+        if not CACHE_ID.fullmatch(str(vid)):
             raise ValueError("视频编号无效")
         return self.root / (str(vid) + "_best.mp4")
 
@@ -341,7 +343,8 @@ class PlaybackCache:
             for session in self._active():
                 session["wanted"] = set() if session.get("ended") else {session["ep"]}
                 session["cache_paused"] = True
-            self.pending_vids.update(p.stem.removesuffix("_best") for p in self.root.glob("*_best.mp4") if p.stem.removesuffix("_best").isdigit())
+            self.pending_vids.update(p.stem.removesuffix("_best") for p in self.root.glob("*_best.mp4")
+                                     if CACHE_ID.fullmatch(p.stem.removesuffix("_best")))
             self.pending_vids.update(self.inflight.values())
             self.pending_vids.update(self.writers)
             self._cleanup()

@@ -2,6 +2,7 @@
 import os
 import shutil
 import inspect
+import re
 from functools import wraps
 from urllib.parse import urlparse
 import time
@@ -170,20 +171,38 @@ track_provider = HongguoTrackProvider(server.H)
 media_source = MediaSource(track_provider, call=track_request)
 
 
-def build_media(vid, stage):
+def build_media(cache_id, stage):
+    match = re.fullmatch(r"(\d{1,24})(?:q(1080|720|540|480|360))?", str(cache_id))
+    if not match:
+        raise ValueError("视频编号无效")
+    vid, max_quality = match.group(1), int(match.group(2)) if match.group(2) else None
+    last_error = None
     try:
-        track = media_source.track(vid)
-        target = str(stage) + '.enc' if track['encrypt'] else str(stage)
-        with timings.measure('download'):
-            # A single CDN hostname can stall while another URL for the same track works.
-            download_with_fallback(track.get('urls') or [track['url']], target,
-                                   server.H.http_request)
-        if track['encrypt']:
-            with timings.measure('decrypt'):
-                result = server.OD.offline_decrypt(track['spade_a'], target, str(stage))
-            if result != str(stage):
-                raise RuntimeError('重封装失败，未生成浏览器可播放文件')
+        track = media_source.track(vid, max_quality=max_quality)
+        for candidate in [track, *track.get('fallbacks', [])]:
+            target = str(stage) + '.enc' if candidate['encrypt'] else str(stage)
+            try:
+                stage.unlink(missing_ok=True)
+                Path(str(stage) + '.enc').unlink(missing_ok=True)
+                with timings.measure('download'):
+                    # Exhaust mirrors of this exact track before lowering quality.
+                    download_with_fallback(candidate.get('urls') or [candidate['url']], target,
+                                           server.H.http_request)
+                if candidate['encrypt']:
+                    with timings.measure('decrypt'):
+                        result = server.OD.offline_decrypt(candidate['spade_a'], target, str(stage))
+                    if result != str(stage):
+                        raise RuntimeError('重封装失败，未生成浏览器可播放文件')
+                if not validate_media(stage):
+                    raise RuntimeError('视频未完整解密或无法解码')
+                Path(str(stage) + '.enc').unlink(missing_ok=True)
+                return
+            except Exception as exc:
+                last_error = exc
+        raise RuntimeError('固定播放源的可用清晰度均播放失败') from last_error
     except Exception:
+        stage.unlink(missing_ok=True)
+        Path(str(stage) + '.enc').unlink(missing_ok=True)
         # Only a failed descriptor is refreshed; valid upcoming tracks remain reusable.
         media_source.invalidate(vid)
         raise
@@ -322,7 +341,7 @@ class LeasedFileResponse(FileResponse):
 
 
 @app.get("/stream")
-def stream(series_id: str = Query(None, pattern=r"^\d{1,24}$"), ep: int = Query(1, ge=1), vid: str = Query(None, pattern=r"^\d{1,24}$"), tv_profile: str = Query("", pattern=r"^(|tcl-hevc|hevc-meta)$")):
+def stream(series_id: str = Query(None, pattern=r"^\d{1,24}$"), ep: int = Query(1, ge=1), vid: str = Query(None, pattern=r"^\d{1,24}$"), tv_profile: str = Query("", pattern=r"^(|tcl-hevc|hevc-meta)$"), quality: str = Query("auto", pattern=r"^(auto|1080p|720p|540p|480p|360p)$")):
     if not vid:
         if not series_id:
             raise HTTPException(400, "缺少剧集编号")
@@ -331,16 +350,17 @@ def stream(series_id: str = Query(None, pattern=r"^\d{1,24}$"), ep: int = Query(
         if not target:
             raise HTTPException(404, "集数不存在")
         vid = str(target["vid"])
-    playback.acquire(vid)
+    cache_id = vid if quality == "auto" else vid + "q" + quality.removesuffix("p")
+    playback.acquire(cache_id)
     compatibility_path = None
     try:
         with timings.measure('stream'):
-            path = playback.ensure(vid)
+            path = playback.ensure(cache_id)
         if tv_profile in {"tcl-hevc", "hevc-meta"}:
             path = compatibility_path = tv_compat.acquire(path)
-        return LeasedFileResponse(path, vid, compatibility_path)
+        return LeasedFileResponse(path, cache_id, compatibility_path)
     except Exception as exc:
-        playback.release(vid)
+        playback.release(cache_id)
         if compatibility_path is not None:
             tv_compat.release(compatibility_path)
         raise HTTPException(502, str(exc)) from exc

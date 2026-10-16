@@ -2,7 +2,7 @@
 <html lang="zh" class="legacy-webview" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="legacy-source-sha256" content="a2b5eab3c8463201b9ef48ab30bbbe3c453f9295374b7bcb2c0ab019cf1d8cdf">
+<meta name="legacy-source-sha256" content="7561af4bdb5a6f94be813f42b2f84a824c7f225467676912b1fc56e0f1e475dc">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>coding伴侣</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%20fill%3D%22none%22%3E%0A%20%20%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2260%22%20height%3D%2260%22%20rx%3D%2218%22%20fill%3D%22%23ff2e5f%22%2F%3E%0A%20%20%3Crect%20x%3D%2210%22%20y%3D%2213%22%20width%3D%2244%22%20height%3D%2238%22%20rx%3D%229%22%20fill%3D%22%231b1e26%22%2F%3E%0A%20%20%3Cg%20fill%3D%22%23aeb7c8%22%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2217%22%20cy%3D%2220%22%20r%3D%221.5%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2222%22%20cy%3D%2220%22%20r%3D%221.5%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2227%22%20cy%3D%2220%22%20r%3D%221.5%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cpath%20d%3D%22m23%2029-6%206%206%206m18-12%206%206-6%206%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M29%2029.5v11l8-5.5-8-5.5Z%22%20fill%3D%22%23ff527b%22%20stroke%3D%22%23ff527b%22%20stroke-width%3D%221.5%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%3C%2Fsvg%3E">
@@ -278,6 +278,10 @@
   .watch-heading .wt { min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .watch-actions { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
   .watch-actions button { padding: 7px 10px; font-size: 12px; }
+  .quality-row { display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; color: #afb7c8; font-size: 12px; }
+  .quality-row label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .quality-row select { min-width: 116px; height: 34px; padding: 0 8px; color: #edf0f5; background: #272b35; border: 1px solid #323744; border-radius: 8px; font: inherit; cursor: pointer; }
+  .quality-actual { min-width: 0; color: #a4aec0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .autoc { color: #edf0f5; background: #272b35; border: 1px solid #323744; border-radius: 8px; cursor: pointer; }
   .autoc.on { color: #ff527b; background: #39202b; border-color: #773248; }
   @media (max-width: 640px) {
@@ -285,6 +289,7 @@
     .watch-toggle { order: 2; }
     .watch .epdrawer { width: 220px; max-width: 55%; }
     .watch-actions { flex-wrap: wrap; }
+    .quality-row { flex-wrap: wrap; }
   }
   .epdrawer {
     width: 292px; flex: none; background: #1b1e26; display: flex; flex-direction: column;

@@ -39,7 +39,7 @@
 (function () {
   'use strict';
   // Only browser playback: TV owns its native transition and rendering feedback.
-  function pageFullscreen(video, hideControls, showControls) {
+  function pageFullscreen(video, hideControls, showControls, w) {
     var stage = video && video.parentElement;
     if (!stage || stage.id !== 'stage' || !(stage.requestFullscreen || stage.webkitRequestFullscreen) ||
         !(document.fullscreenEnabled || document.webkitFullscreenEnabled)) return null;
@@ -50,7 +50,7 @@
         '.coding-fullscreen-button{position:absolute;right:16px;top:16px;z-index:10}' +
         '.coding-media-bar{position:absolute;bottom:16px;left:16px;right:16px;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border-radius:12px;background:#14141eee;color:#fff;font:13px sans-serif;opacity:0;pointer-events:none;transition:opacity .15s}' +
         '.coding-media-bar.is-visible{opacity:1;pointer-events:auto}' +
-        '.coding-media-bar input{min-width:0;accent-color:#ff4b7d}.coding-seek{flex:1;width:80px}.coding-volume{width:70px}.coding-media-time{white-space:nowrap}' +
+        '.coding-media-bar input{min-width:0;accent-color:#ff4b7d}.coding-seek{flex:1;width:80px}.coding-volume{width:70px}.coding-media-time,.coding-quality-actual{white-space:nowrap}' +
         '@media(max-width:600px){.coding-media-bar{left:6px;right:6px;bottom:6px;padding:6px;gap:4px}.coding-media-bar .coding-volume{display:none}.coding-media-bar button,.coding-media-bar select{padding:6px;font-size:12px}}';
       [':fullscreen', ':-webkit-full-screen'].forEach(function (pseudo) {
         var selector = '.coding-page-fullscreen' + pseudo;
@@ -62,7 +62,7 @@
     }
     var originalControls = video.controls, timer = 0, x = null, y = null, stopped = false, listeners = [];
     var button = document.createElement('button'), bar = document.createElement('div');
-    var adapter = {enabled: true, show: reveal, hide: hide, stop: stop};
+    var adapter = {enabled: true, show: reveal, hide: hide, stop: stop, quality: updateQuality};
     function listen(target, event, fn) { target.addEventListener(event, fn); listeners.push([target, event, fn]); }
     function control(tag, label, className) {
       var node = document.createElement(tag); node.setAttribute('aria-label', label);
@@ -79,6 +79,15 @@
     var volume = control('input', '音量', 'coding-volume'); volume.type = 'range'; volume.min = '0'; volume.max = '1'; volume.step = '.05';
     var speed = control('select', '播放速度');
     [.5, .75, 1, 1.25, 1.5, 1.75, 2].forEach(function (rate) { var option = document.createElement('option'); option.value = String(rate); option.textContent = rate + '倍'; speed.appendChild(option); });
+    var quality = null, qualityActual = null;
+    if (w && w.qualityValues && w.setQuality) {
+      quality = control('select', '播放清晰度');
+      w.qualityValues.forEach(function (value) {
+        var option = document.createElement('option'); option.value = value;
+        option.textContent = value === 'auto' ? '自动（默认最高）' : value + ' 上限'; quality.appendChild(option);
+      });
+      qualityActual = control('span', '当前清晰度', 'coding-quality-actual');
+    }
     if (video.requestPictureInPicture || video.webkitSetPresentationMode) {
       var pip = control('button', '画中画');
       listen(pip, 'click', function () {
@@ -99,13 +108,17 @@
       timer = setTimeout(function () { if (!video.paused) hide(); }, 1800);
     }
     function format(value) { value = isFinite(value) ? Math.max(0, Math.floor(value)) : 0; return Math.floor(value / 60) + ':' + ('0' + value % 60).slice(-2); }
+    function updateQuality() {
+      if (!quality) return;
+      quality.value = w.quality; qualityActual.textContent = w.actualQualityLabel || '当前：检测中';
+    }
     function update() {
       play.textContent = video.paused ? '播放' : '暂停'; play.setAttribute('aria-label', play.textContent);
       seek.value = isFinite(video.duration) && video.duration > 0 ? String(Math.round(video.currentTime / video.duration * 1000)) : '0';
       seek.disabled = !(isFinite(video.duration) && video.duration > 0);
       time.textContent = format(video.currentTime) + ' / ' + format(video.duration);
       mute.textContent = video.muted ? '取消静音' : '静音'; mute.setAttribute('aria-label', mute.textContent);
-      volume.value = String(video.muted ? 0 : video.volume); speed.value = String(video.playbackRate);
+      volume.value = String(video.muted ? 0 : video.volume); speed.value = String(video.playbackRate); updateQuality();
     }
     function togglePlay() { if (video.paused) { var promise = video.play(); if (promise && promise.catch) promise.catch(reveal); } else video.pause(); reveal(); }
     function changed() {
@@ -148,6 +161,7 @@
     listen(volume, 'input', function () { video.muted = false; video.volume = Number(volume.value); reveal(); });
     listen(mute, 'click', function () { video.muted = !video.muted; reveal(); });
     listen(speed, 'change', function () { video.playbackRate = Number(speed.value); reveal(); });
+    if (quality) listen(quality, 'change', function () { w.setQuality(quality.value); reveal(); });
     ['timeupdate', 'loadedmetadata', 'play', 'pause', 'volumechange', 'ratechange'].forEach(function (name) { listen(video, name, update); });
     listen(button, 'click', toggle); listen(button, 'focus', reveal); listen(bar, 'focusin', reveal);
     listen(bar, 'dblclick', function (event) { event.stopPropagation(); });
@@ -232,7 +246,7 @@
     }
     browserControls = pageFullscreen(video, function () {
       suppressControls(); if (!video.paused) playing();
-    }, restoreControls);
+    }, restoreControls, w);
     return {
       remember: function (data) { if (data !== replay) { snapshot = data; checked = Date.now(); } },
       select: function (n, retry) {
@@ -244,6 +258,7 @@
         return replay;
       },
       switching: switching, waiting: waiting, playing: playing, show: show, hide: hide,
+      quality: function () { if (browserControls) browserControls.quality(); },
       stop: function () {
         cancel(); restoreControls();
         if (browserControls) browserControls.stop();

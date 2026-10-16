@@ -20,7 +20,7 @@ class Provider:
 
 
 class MediaSourceTests(unittest.TestCase):
-    def test_five_episodes_reuse_one_batch_and_best_remains_largest(self):
+    def test_five_episodes_reuse_one_batch_and_best_is_highest_quality(self):
         p = Provider()
         original = p.get_video_tracks
         def tracks(vids, force=False):
@@ -32,9 +32,10 @@ class MediaSourceTests(unittest.TestCase):
         c = MediaSource(p)
         c.prefetch(["1", "2", "3", "4", "5"])
         self.assertEqual([c.track(str(v))["url"] for v in range(1, 6)],
-                         ["https://example.invalid/" + str(v) + "largest" for v in range(1, 6)])
-        self.assertEqual(c.track("1")["urls"], ["https://example.invalid/1largest"])
-        self.assertEqual(c.track("1")["definition"], "720p")
+                         ["https://example.invalid/" + str(v) + "small" for v in range(1, 6)])
+        self.assertEqual(c.track("1")["urls"], ["https://example.invalid/1small"])
+        self.assertEqual(c.track("1")["definition"], "2160p")
+        self.assertEqual([t['definition'] for t in c.track('1')['fallbacks']], ['1080p', '720p'])
         self.assertEqual(p.calls, [(["1", "2", "3", "4", "5"], False)])
 
     def test_direct_track_and_invalidation_force_only_failed_episode(self):
@@ -44,6 +45,22 @@ class MediaSourceTests(unittest.TestCase):
         c.invalidate("1")
         c.track("1"); c.track("2"); c.track("3")
         self.assertEqual(p.calls, [(["1", "2"], False), (["1"], True), (["3"], False)])
+
+    def test_manual_quality_is_a_ceiling_and_keeps_lower_fallbacks(self):
+        p = Provider()
+        p.get_video_tracks = lambda vids, force=False: {
+            v: [option(v + "1080", 300, "1080p"), option(v + "720", 200, "720p"),
+                option(v + "480", 100, "480p"), option(v + "360", 50, "360p")]
+            for v in vids
+        }
+        source = MediaSource(p)
+        self.assertEqual(source.track("1")["definition"], "1080p")
+        limited = source.track("1", max_quality=720)
+        self.assertEqual(limited["definition"], "720p")
+        self.assertEqual([track["definition"] for track in limited["fallbacks"]], ["480p", "360p"])
+        self.assertEqual(source.track("1", max_quality=540)["definition"], "480p")
+        with self.assertRaisesRegex(PermanentSourceError, "不高于 240p"):
+            source.track("1", max_quality=240)
 
     def test_missing_member_falls_back_individually_and_siblings_survive(self):
         p = Provider()
