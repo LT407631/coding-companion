@@ -125,7 +125,14 @@
     previous.onclick = function () { shift(-1); };
     next.onclick = function () { shift(1); };
     acceptButton.onclick = function () { accept(w); };
-    var startY = null;
+    var startY = null, wheelAt = 0;
+    stage.addEventListener('wheel', function (event) {
+      var vertical = Number(event.deltaY) || 0;
+      if (Math.abs(vertical) < 10 || Math.abs(vertical) < Math.abs(Number(event.deltaX) || 0)) return;
+      event.preventDefault(); event.stopPropagation();
+      if (Date.now() - wheelAt < 700) return;
+      wheelAt = Date.now(); shift(vertical < 0 ? -1 : 1);
+    }, {passive: false});
     stage.addEventListener('touchstart', function (event) { startY = event.touches && event.touches[0] ? event.touches[0].clientY : null; }, {passive: true});
     stage.addEventListener('touchend', function (event) {
       if (startY === null || !event.changedTouches || !event.changedTouches[0]) return;
