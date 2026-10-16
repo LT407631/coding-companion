@@ -8,7 +8,7 @@
   function fresh(w) {
     return matches(candidate,w) && candidate.data && Date.now()-candidate.checked<8000;
   }
-  function next(w,v) {
+  function next(w,v,early) {
     if(!w || !w.alive || !w.auto || w.mode!=='nas' || !v._tvNative || v.paused || !v.duration || w.ep>=w.eps.length) return '';
     var left=v.duration-v.currentTime;
     if(left<=0 || left>8) return '';
@@ -23,7 +23,7 @@
         .catch(function(){c.data=null;})
         .finally(function(){clearTimeout(timer);c.pending=false;});
     }
-    return left<=2 && fresh(w)?'/stream?series_id='+w.sid+'&ep='+(w.ep+1):'';
+    return left<=(early?8:2) && fresh(w)?'/stream?series_id='+w.sid+'&ep='+(w.ep+1):'';
   }
   function advance(w) {
     if(!w.auto || w.ep>=w.eps.length || !fresh(w)) return false;

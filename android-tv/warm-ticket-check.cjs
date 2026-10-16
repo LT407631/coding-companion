@@ -1,0 +1,16 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+let now=1000000,hint='',calls=[],delayed=null;
+const v={isConnected:true,style:{},controls:false,load(){},play(){return Promise.resolve();},pause(){},getAttribute(){return null;},removeAttribute(){},dispatchEvent(){},getBoundingClientRect(){return {left:0,top:0,width:1280,height:720};}};
+const ctx={URL,AbortController,Event,Promise,setTimeout,clearTimeout,Date:class extends Date{static now(){return now;}},W:{},CodingTVTransition:{next(){return hint;}},location:{hash:'#/watch/123/2',href:'http://site.test/ui',origin:'http://site.test'},innerWidth:1280,document:{querySelector(){return null;},querySelectorAll(){return [];}},fetch:async(p,o)=>{const ep=JSON.parse(o.body).ep;calls.push(ep);if(delayed)return new Promise(resolve=>delayed.resolve=resolve);return {ok:true,json:async()=>({token:'episode'+ep+'.signature'})};}};ctx.window=ctx;
+vm.runInNewContext(fs.readFileSync(__dirname+'/assets/tv-native.js','utf8'),ctx);const tv=ctx.CodingNative,flush=()=>new Promise(r=>setImmediate(r));
+(async()=>{
+ tv.installVideo(v);tv.decoderState('system','','',true,true);v.src='/stream?series_id=123&ep=2';v.load();tv.snapshot();await flush();assert.equal(tv.snapshot().mediaTicket,'episode2.signature');
+ hint='/stream?series_id=123&ep=3';assert.equal(tv.snapshot().nextMediaTicket,'');await flush();assert.equal(tv.snapshot().nextMediaTicket,'episode3.signature','prefetch exact NEXT episode authorization, not current ticket');assert.deepEqual(calls,[2,3]);
+ // Production W.load clears source and loads before assigning/loading the ready next source.
+ v.pause();v.removeAttribute('src');v.load();v.src=hint;v.load();hint='';const adopted=tv.snapshot();assert.equal(adopted.mediaTicket,'episode3.signature','natural handoff must reuse already valid ticket');assert.deepEqual(calls,[2,3],'no post-end authorization roundtrip');
+ delayed={};hint='/stream?series_id=123&ep=4';tv.snapshot();const reply=delayed;hint='';tv.snapshot();reply.resolve({ok:true,json:async()=>({token:'late.signature'})});delayed=null;await flush();assert.equal(tv.snapshot().nextMediaTicket,'','pause/auto-off/seek-back cancellation ignores late ticket');
+ const n=calls.length;hint='https://foreign.test/stream?series_id=123&ep=4';tv.snapshot();await flush();assert.equal(calls.length,n,'foreign next URL rejected');hint='/stream?series_id=999&ep=4';tv.snapshot();assert.equal(calls.length,n,'other series rejected');hint='/stream?series_id=123&ep=6';tv.snapshot();assert.equal(calls.length,n,'nonadjacent episode rejected');
+ hint='/stream?series_id=123&ep=4';tv.decoderState('system','','',true,false);tv.snapshot();await flush();assert.equal(calls.length,n,'other Xiaomi models do not prewarm');
+ tv.decoderState('system','','',true,true);tv.snapshot();await flush();assert.equal(tv.snapshot().nextMediaTicket,'episode4.signature');ctx.location.hash='#/settings';tv.snapshot();ctx.location.hash='#/watch/123/3';hint='';assert.equal(tv.snapshot().nextMediaTicket,'','route exit clears prepared authorization');
+ console.log('PASS: next-episode ticket prefetch/promotion removes post-end auth; HttpOnly/scope/adjacency/origin, cancel/late reply, source-load lifecycle and other-device isolation');
+})().catch(e=>{console.error(e);process.exitCode=1;});

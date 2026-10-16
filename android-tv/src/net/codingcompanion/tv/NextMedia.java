@@ -22,9 +22,10 @@ final class NextMedia {
         if(player!=null&&owner==id&&source.equals(url))return;
         clear();if(blocked==id&&blockedSource.equals(url))return;
         try{
-            final MediaPlayer p=TclMediaSource.create();player=p;source=url;owner=id;deadline=SystemClock.elapsedRealtime()+3000;
+            final boolean metadataOnly=RedmiPlayback.applies();
+            final MediaPlayer p=metadataOnly?TclMediaSource.createHardware():TclMediaSource.create();player=p;source=url;owner=id;deadline=SystemClock.elapsedRealtime()+(metadataOnly?8000:3000);
             // No surface and no start/rate/seek: current video and audio keep playing until their end.
-            p.setOnPreparedListener(m->{if(player==m){ready=true;deadline=SystemClock.elapsedRealtime()+5000;}});
+            p.setOnPreparedListener(m->{if(player==m){ready=true;deadline=SystemClock.elapsedRealtime()+(metadataOnly?12000:5000);}});
             p.setOnErrorListener((m,what,extra)->{if(player==m)block();return true;});
             TclMediaSource.set(p,activity,url,headers,null);p.prepareAsync();
         }catch(Exception ignored){block();}

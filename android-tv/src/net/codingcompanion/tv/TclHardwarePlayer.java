@@ -20,6 +20,7 @@ import java.util.Map;
 
 /** Scoped platform codecs: one hardware video decoder and a small PCM audio sink. */
 final class TclHardwarePlayer extends MediaPlayer {
+    private static final java.util.concurrent.Semaphore REDMI_VIDEO=new java.util.concurrent.Semaphore(1);
     private final Handler callbacks=new Handler(Looper.getMainLooper());
     private volatile boolean closed, ready, playing, launched, videoDone, audioDone;
     private volatile int duration, width, height, target, generation;
@@ -144,8 +145,12 @@ final class TclHardwarePlayer extends MediaPlayer {
         codec.queueInputBuffer(index,0,bytes,extractor.getSampleTime(),0);extractor.advance();return false;
     }
     private void video(){
-        MediaCodec codec=null;MediaExtractor extractor=videoInput;
+        MediaCodec codec=null;MediaExtractor extractor=videoInput;boolean permit=false;
         try{
+            if(RedmiPlayback.applies()){
+                while(!closed&&!(permit=REDMI_VIDEO.tryAcquire(50,java.util.concurrent.TimeUnit.MILLISECONDS))){}
+                if(closed)return;
+            }
             codec=HardwareVideoCodec.open(component,videoFormat,surface,this::note);openedComponent=codec.getName();
             note("decoder-open,name="+openedComponent+",classification="+(android.os.Build.VERSION.SDK_INT>=29?"platform-hardware":"vendor-allowlist")+",width="+width+",height="+height);
             if(renderedFrame!=null)codec.setOnFrameRenderedListener((decoder,pts,nanos)->{if(!closed){renderedFrames++;renderedFrame.run();}},callbacks);
@@ -171,7 +176,7 @@ final class TclHardwarePlayer extends MediaPlayer {
                 }
             }
         }catch(Exception e){if(!closed){note("decoder-error,type="+e.getClass().getSimpleName());error();}}
-        finally{if(codec!=null)codec.release();extractor.release();}
+        finally{try{if(codec!=null)codec.release();}finally{try{extractor.release();}finally{if(permit)REDMI_VIDEO.release();}}}
     }
     private AudioTrack sink(MediaFormat format){
         int rate=format.getInteger(MediaFormat.KEY_SAMPLE_RATE),channels=format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);

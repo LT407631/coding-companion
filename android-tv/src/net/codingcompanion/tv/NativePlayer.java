@@ -102,7 +102,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
             decoderPrefs.edit().putString("successful",fallback.mode()).apply();
         busy=true;
         String remembered=decoderPrefs.getString("successful","");
-        web.evaluateJavascript("window.CodingNative ? (CodingNative.decoderState("+JSONObject.quote(requestedMode)+","+JSONObject.quote(remembered)+","+JSONObject.quote(TvCompatibility.profile(Build.MODEL))+","+(TclMediaSource.ticketTransport()&&!PlaybackFallback.BROWSER.equals(requestedMode))+") ,CodingNative.snapshot()) : null",result->{
+        web.evaluateJavascript("window.CodingNative ? (CodingNative.decoderState("+JSONObject.quote(requestedMode)+","+JSONObject.quote(remembered)+","+JSONObject.quote(TvCompatibility.profile(Build.MODEL))+","+(TclMediaSource.ticketTransport()&&!PlaybackFallback.BROWSER.equals(requestedMode))+","+RedmiPlayback.applies()+") ,CodingNative.snapshot()) : null",result->{
             busy=false;
             if(!running)return;
             try{
@@ -151,14 +151,20 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
                     report("timeupdate",positionMs()/1000.0,durationMs()/1000.0,null);
                     String hint=data.optString("next"),url="";
                     long remaining=durationMs()-positionMs();
-                    if(!TclMediaSource.localTransport()&&playing&&remaining>0&&remaining<=2000&&!hint.isEmpty()){
+                    boolean warmRedmi=RedmiPlayback.applies();
+                    String nextTicket=data.optString("nextMediaTicket");
+                    if((!TclMediaSource.localTransport()||warmRedmi)&&playing&&remaining>0&&remaining<=(warmRedmi?8000:2000)&&!hint.isEmpty()&&
+                        (!warmRedmi||nextTicket.length()<=1024&&nextTicket.matches("[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"))){
                         try{
                             String proposed=mediaURL(hint);Uri current=Uri.parse(mediaURL(source)),following=Uri.parse(proposed);
                             if(current.getQueryParameter("series_id").equals(following.getQueryParameter("series_id"))&&Integer.parseInt(following.getQueryParameter("ep"))==Integer.parseInt(current.getQueryParameter("ep"))+1)url=proposed;
                         }catch(Exception ignored){}
                     }
                     // At natural end retain the prepared next player while the page hands over.
-                    if(!completedNaturally&&!browser&&fallback!=null&&PlaybackFallback.SYSTEM.equals(fallback.mode()))next.update(url,token,headers());
+                    if(!completedNaturally&&!browser&&fallback!=null&&PlaybackFallback.SYSTEM.equals(fallback.mode())){
+                        Map<String,String> nextHeaders=headers();if(warmRedmi)nextHeaders.put("X-Coding-Media",nextTicket);
+                        next.update(url,token,nextHeaders);
+                    }
                 }
             }catch(Exception e){failure("系统播放器无法读取本集");}
             finally{handler.removeCallbacks(tick);if(running)handler.postDelayed(tick,wakePending?0:250);wakePending=false;}
@@ -184,7 +190,7 @@ final class NativePlayer implements TextureView.SurfaceTextureListener {
             p.setOnSeekCompleteListener(m->{if(media==m)report("seeked",m.getCurrentPosition()/1000.0,m.getDuration()/1000.0,null);});
             p.setOnErrorListener((m,what,extra)->{if(media==m){diagnostics.systemError(m,what,extra);failure("电视解码失败（"+what+" / "+extra+"）");}return true;});
             String url=mediaURL(raw);diagnostics.source(url);
-            if(standby!=null)onPrepared(p);
+            if(standby!=null){diagnostics.record("system-open","next-adopt,prepared=true");onPrepared(p);}
             else {diagnostics.record("system-open","starting");TclMediaSource.set(p,activity,url,headers(),note->diagnostics.transport(url,note));p.prepareAsync();}
         }catch(Exception e){
             diagnostics.record("system-exception",e.getClass().getSimpleName());
