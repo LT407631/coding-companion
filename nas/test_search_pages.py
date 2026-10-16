@@ -97,6 +97,21 @@ class SearchPageTests(unittest.TestCase):
         self.assertEqual(self.source.calls, [])
         self.assertEqual(fallback.calls, ['新剧一', '新剧二'])
 
+    def test_website_snapshot_is_paginated_without_requery_or_source_switch(self):
+        fallback = Fallback([{'series_id': str(index), 'title': '官网剧' + str(index)}
+                             for index in range(1, 37)])
+        self.search = SearchPages(self.source, self.cache, fallback, website_only=True)
+        first, _ = self.page('第二季')
+        second, _ = self.page('第二季', first['next_cursor'])
+        self.assertEqual(len(first['results']), 24)
+        self.assertEqual(len(second['results']), 12)
+        self.assertEqual(first['source'], 'website')
+        self.assertEqual(second['source'], 'website')
+        self.assertFalse(second['has_more'])
+        self.assertEqual(fallback.calls, ['第二季'])
+        self.assertEqual(self.source.calls, [])
+        self.assertEqual(len({row['series_id'] for row in first['results'] + second['results']}), 36)
+
     def test_website_failure_does_not_switch_back_to_legacy(self):
         fallback = Fallback([])
         fallback.search = lambda query: (_ for _ in ()).throw(ValueError('website offline'))

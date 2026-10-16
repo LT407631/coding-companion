@@ -1,21 +1,32 @@
-"""Bounded fallback search using Hongguo's public suggestion endpoint."""
+"""Build one bounded, deduplicated result snapshot from Hongguo's website."""
 from concurrent.futures import ThreadPoolExecutor, wait
 import json
 import re
 import time
+from urllib.parse import quote
 
 import requests
 
 
 SUGGEST_URL = "https://hongguoduanju.com/incent_resource/suggestion"
+SEARCH_URL = "https://hongguoduanju.com/search/{}"
 MAX_BODY = 256 * 1024
 MAX_DETAIL_BODY = 512 * 1024
-MAX_RESULTS = 20
+MAX_SEARCH_BODY = 768 * 1024
+MAX_RESULTS = 50
+SUGGEST_COUNT = 20
+MAX_DISCOVERY_QUERIES = 4
 DETAIL_WORKERS = 6
 SOURCE_WORKERS = 2
+DISCOVERY_WORKERS = 4
 MAX_SOURCE_DETAILS = 8
 TOTAL_BUDGET = 22
 DETAIL_BUDGET = 6
+SEASON_NUMBER = {
+    "一": "1", "二": "2", "两": "2", "兩": "2", "三": "3", "四": "4", "五": "5",
+    "六": "6", "七": "7", "八": "8", "九": "9", "十": "10",
+}
+NUMBER_SEASON = {value: key for key, value in SEASON_NUMBER.items() if key not in {"两", "兩"}}
 
 
 class HongguoWebSearch:
@@ -32,12 +43,62 @@ class HongguoWebSearch:
                                               thread_name_prefix="search-detail")
         self.source_pool = ThreadPoolExecutor(max_workers=SOURCE_WORKERS,
                                               thread_name_prefix="search-source")
+        self.discovery_pool = ThreadPoolExecutor(max_workers=DISCOVERY_WORKERS,
+                                                 thread_name_prefix="search-website")
 
     def search(self, query, count=MAX_RESULTS):
         deadline = time.monotonic() + self.total_budget
+        first_error = None
+        try:
+            first_items = self._suggest(query)
+            successful = True
+        except Exception as exc:
+            first_items, first_error, successful = [], exc, False
+        queries = self._discovery_queries(query, first_items)
+        tasks = [("page", query, self.discovery_pool.submit(self._search_page, query))]
+        for expanded in queries[1:]:
+            tasks.append(("suggest", expanded, self.discovery_pool.submit(self._suggest, expanded)))
+            tasks.append(("page", expanded, self.discovery_pool.submit(self._search_page, expanded)))
+        completed, unfinished = wait([task[2] for task in tasks],
+                                     timeout=max(0, deadline - time.monotonic()))
+        for future in unfinished:
+            future.cancel()
+        batches = [first_items]
+        for _, _, future in tasks:
+            if future not in completed:
+                continue
+            try:
+                batches.append(future.result())
+                successful = True
+            except Exception:
+                continue
+        if not successful:
+            raise first_error or ValueError("Website search unavailable")
+        results, positions = [], {}
+        for items in batches:
+            for item in items:
+                row = self._row(item)
+                if not row:
+                    continue
+                position = positions.get(row["series_id"])
+                if position is None:
+                    positions[row["series_id"]] = len(results)
+                    results.append(row)
+                elif row["cover"] and not results[position]["cover"]:
+                    results[position] = row
+        # Broad website searches can contain fuzzy matches. A season query is
+        # useful only when every returned card still names that exact season.
+        aliases = self._season_aliases(query)
+        if aliases:
+            exact = [row for row in results if any(alias in row["title"] for alias in aliases)]
+            if exact:
+                results = exact
+        return self._enrich(results[:min(max(count, 1), MAX_RESULTS)], deadline)
+
+    def _suggest(self, query):
         response = self.session.get(
             SUGGEST_URL,
-            params={"app_id": "8662", "query": query, "count": str(min(max(count, 1), MAX_RESULTS))},
+            params={"app_id": "8662", "query": query, "count": str(SUGGEST_COUNT)},
             headers={
                 "Accept": "application/json",
                 "Accept-Language": "zh-CN,zh;q=0.9",
@@ -53,18 +114,62 @@ class HongguoWebSearch:
         items = payload.get("suggest_list") if isinstance(payload, dict) else None
         if not isinstance(items, list):
             raise ValueError("Invalid fallback search response")
-        results, positions = [], {}
+        return items
+
+    def _search_page(self, query):
+        response = self.session.get(
+            SEARCH_URL.format(quote(query, safe="")),
+            headers={
+                "Accept": "text/html",
+                "Accept-Language": "zh-CN,zh;q=0.9",
+                "Referer": "https://hongguoduanju.com/",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Safari/537.36",
+            },
+            timeout=(3, min(8, self.total_budget)),
+        )
+        response.raise_for_status()
+        if len(response.content) > MAX_SEARCH_BODY:
+            raise ValueError("Oversized website search response")
+        text = response.content.decode("utf-8", "replace")
+        match = re.search(r"(?:window\.)?_ROUTER_DATA\s*=\s*", text)
+        if not match:
+            raise ValueError("Missing website search data")
+        data, _ = json.JSONDecoder().raw_decode(text[match.end():])
+        loaders = data.get("loaderData") if isinstance(data, dict) else None
+        page = loaders.get("search_(keyword)/page") if isinstance(loaders, dict) else None
+        items = page.get("searchList") if isinstance(page, dict) else None
+        if not isinstance(page, dict) or page.get("isSuccess") is not True or not isinstance(items, list):
+            raise ValueError("Invalid website search data")
+        return items
+
+    @classmethod
+    def _season_aliases(cls, query):
+        query = str(query).strip()
+        chinese = re.search(r"第\s*([%s])\s*季" % "".join(SEASON_NUMBER), query)
+        numeric = re.search(r"第\s*(\d{1,2})\s*季", query)
+        if chinese:
+            number = SEASON_NUMBER[chinese.group(1)]
+            return tuple(dict.fromkeys((query, re.sub(chinese.group(0), "第" + number + "季", query))))
+        if numeric and numeric.group(1) in NUMBER_SEASON:
+            return tuple(dict.fromkeys((query, re.sub(numeric.group(0), "第" + NUMBER_SEASON[numeric.group(1)] + "季", query))))
+        return ()
+
+    @classmethod
+    def _discovery_queries(cls, query, items):
+        queries = [query]
+        for alias in cls._season_aliases(query)[1:]:
+            if alias not in queries:
+                queries.append(alias)
+        aliases = cls._season_aliases(query) or (query,)
         for item in items:
-            row = self._row(item)
-            if not row:
+            if not isinstance(item, dict) or item.get("word_type") != "common_query":
                 continue
-            position = positions.get(row["series_id"])
-            if position is None:
-                positions[row["series_id"]] = len(results)
-                results.append(row)
-            elif row["cover"] and not results[position]["cover"]:
-                results[position] = row
-        return self._enrich(results, deadline)
+            name = str(item.get("name") or "").strip()
+            if name and any(alias in name for alias in aliases) and name not in queries:
+                queries.append(name)
+            if len(queries) >= MAX_DISCOVERY_QUERIES:
+                break
+        return queries[:MAX_DISCOVERY_QUERIES]
 
     def _enrich(self, results, deadline):
         missing = [(index, row) for index, row in enumerate(results) if not row["cover"]]

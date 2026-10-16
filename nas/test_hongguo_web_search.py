@@ -2,6 +2,7 @@ import json
 import threading
 import time
 import unittest
+from urllib.parse import unquote
 
 from hongguo_web_search import HongguoWebSearch
 
@@ -19,8 +20,8 @@ class Response:
 
 
 class Session:
-    def __init__(self, payload, details=None):
-        self.payload, self.details = payload, details or {}
+    def __init__(self, payload, details=None, pages=None):
+        self.payload, self.details, self.pages = payload, details or {}, pages or {}
         self.calls = []
 
     def get(self, url, **options):
@@ -32,6 +33,13 @@ class Session:
                 raise detail
             loader = {"loaderData": {"detail_page": {"seriesDetail": detail}}}
             return Response(content=("<script>window._ROUTER_DATA=" + json.dumps(loader) + "</script>").encode())
+        if "/search/" in url:
+            query = unquote(url.rsplit("/", 1)[-1])
+            loader = {"loaderData": {"search_(keyword)/page": {
+                "isSuccess": True, "query": query, "searchList": self.pages.get(query, [])}}}
+            return Response(content=("<script>window._ROUTER_DATA=" + json.dumps(loader) + "</script>").encode())
+        if isinstance(self.payload, Exception):
+            raise self.payload
         return Response(self.payload)
 
 
@@ -56,13 +64,43 @@ class HongguoWebSearchTests(unittest.TestCase):
         self.assertEqual(rows[0]["cover"], "https://example/shidi")
         self.assertEqual(rows[0]["episode_cnt"], 410)
         self.assertEqual(rows[0]["category"], "玄幻 · 穿越")
-        self.assertEqual(session.calls[0][1]["params"]["query"], "尸帝")
-        self.assertEqual(session.calls[0][1]["params"]["count"], "20")
+        suggestion = next(call for call in session.calls if call[0].endswith("/suggestion"))
+        self.assertEqual(suggestion[1]["params"]["query"], "尸帝")
+        self.assertEqual(suggestion[1]["params"]["count"], "20")
+
+    def test_second_season_builds_one_deduplicated_website_snapshot(self):
+        def item(series_id, title):
+            return {"keyword": series_id, "name": title, "word_type": "short_play_name",
+                    "video_data": {"series_id": series_id, "series_title": title,
+                                   "series_cover": "https://example/" + series_id}}
+
+        session = Session({"suggest_list": [
+            item("1", "原始剧第二季"),
+            {"keyword": "common", "name": "第二季上新", "word_type": "common_query", "video_data": {}},
+        ]}, pages={
+            "第二季": [item("2", "网页剧第二季"), item("9", "无关第一季")],
+            "第2季": [item("3", "数字剧第2季"), item("2", "网页剧第二季")],
+            "第二季上新": [item("4", "上新剧第二季")],
+        })
+        rows = HongguoWebSearch(session).search("第二季")
+        self.assertEqual([row["series_id"] for row in rows], ["1", "2", "3", "4"])
+        self.assertTrue(all("第二季" in row["title"] or "第2季" in row["title"] for row in rows))
+        queries = [call[1]["params"]["query"] for call in session.calls
+                   if call[0].endswith("/suggestion")]
+        self.assertEqual(set(queries), {"第二季", "第2季", "第二季上新"})
 
     def test_unresolved_suggestion_token_is_not_returned_as_a_series(self):
         session = Session({"suggest_list": [{"keyword": "123", "name": "保留", "video_data": {}}]},
                           {"123": RuntimeError("detail unavailable")})
         self.assertEqual(HongguoWebSearch(session).search("保留"), [])
+
+    def test_website_page_remains_single_source_fallback_when_suggestion_fails(self):
+        page_item = {"keyword": "123", "name": "官网页面剧", "video_data": {
+            "series_id": "123", "series_title": "官网页面剧",
+            "series_cover": "https://example/page"}}
+        session = Session(RuntimeError("suggestion unavailable"), pages={"官网页面剧": [page_item]})
+        rows = HongguoWebSearch(session).search("官网页面剧")
+        self.assertEqual([row["series_id"] for row in rows], ["123"])
 
     def test_source_detail_fills_cover_when_public_detail_is_incomplete(self):
         session = Session({"suggest_list": [{"keyword": "123", "name": "第二季", "video_data": {}}]},

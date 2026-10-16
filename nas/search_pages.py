@@ -18,6 +18,8 @@ CHAIN_TTL = 3600
 MAX_PAGES = 64
 MAX_SEEN = 4096
 MAX_EMPTY_PAGES = 3
+# A website snapshot is created once, then sliced without another upstream call.
+WEBSITE_PAGE_SIZE = 24
 CURSOR_PATTERN = r'^(?:[0-9a-f]{64})?$'
 
 
@@ -61,7 +63,7 @@ class SearchPages:
             raise HTTPException(400, '搜索游标无效')
         namespace = _namespace(self.source)
         if self.website_only:
-            namespace += ':website-only-v1'
+            namespace += ':website-only-v2'
         state = None
         if cursor:
             entry = self.cache.read('search-cursor-v1:' + cursor)
@@ -113,6 +115,8 @@ class SearchPages:
             expires = resume.get('expires')
             return (resume.get('query') == query and resume.get('namespace') == namespace
                     and isinstance(expires, (int, float)) and expires > time.time()
+                    and (not resume.get('website_key') or self.cache.read(
+                        'search-website-v1:' + resume['website_key']) is not None)
                     and (state is None or resume.get('chain') == state['chain']))
         except (ValueError, AttributeError):
             return False
@@ -191,20 +195,44 @@ class SearchPages:
                                    'has_more': more, 'next_cursor': next_cursor}))
 
     def _fallback(self, state):
-        results = self.fallback.search(state['query'])
-        if not isinstance(results, list) or len(results) > 50:
-            raise ValueError('Invalid fallback search results')
-        clean, seen = [], set()
-        for row in results:
-            if not isinstance(row, dict):
-                continue
-            sid = str(row.get('series_id') or '')
-            if re.fullmatch(r'\d{1,24}', sid) and sid not in seen:
-                seen.add(sid)
-                clean.append(dict(row, series_id=sid))
-        return Payload(json_bytes({'query': state['query'], 'results': clean,
-                                   'has_more': False, 'next_cursor': None,
-                                   'source_fallback': True}))
+        snapshot_key = state.get('website_key')
+        if snapshot_key:
+            entry = self.cache.read('search-website-v1:' + snapshot_key)
+            if not entry or hashlib.sha256(entry.body).hexdigest() != snapshot_key:
+                raise HTTPException(410, '搜索分页已过期，请重新搜索')
+            clean = json.loads(entry.body)
+        else:
+            results = self.fallback.search(state['query'])
+            if not isinstance(results, list) or len(results) > 50:
+                raise ValueError('Invalid fallback search results')
+            clean, seen = [], set()
+            for row in results:
+                if not isinstance(row, dict):
+                    continue
+                sid = str(row.get('series_id') or '')
+                if re.fullmatch(r'\d{1,24}', sid) and sid not in seen:
+                    seen.add(sid)
+                    clean.append(dict(row, series_id=sid))
+            snapshot = json_bytes(clean)
+            snapshot_key = hashlib.sha256(snapshot).hexdigest()
+            self.cache.put('search-website-v1:' + snapshot_key, Payload(snapshot),
+                           generation=self.cache.generation)
+        offset = state.get('offset', 0)
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError('Invalid website search offset')
+        end = min(offset + WEBSITE_PAGE_SIZE, len(clean))
+        more = end < len(clean)
+        next_cursor = None
+        if more:
+            resume = dict(state, website_key=snapshot_key, offset=end,
+                          pages=state['pages'] + 1)
+            body = json_bytes(resume)
+            next_cursor = hashlib.sha256(body).hexdigest()
+            self.cache.put('search-cursor-v1:' + next_cursor, Payload(body),
+                           generation=self.cache.generation)
+        return Payload(json_bytes({'query': state['query'], 'results': clean[offset:end],
+                                   'has_more': more, 'next_cursor': next_cursor,
+                                   'source_fallback': True, 'source': 'website'}))
 
 
 def install_search(app, source, cache, fallback=None, website_only=False):
