@@ -105,12 +105,29 @@ class SearchPageTests(unittest.TestCase):
         second, _ = self.page('第二季', first['next_cursor'])
         self.assertEqual(len(first['results']), 24)
         self.assertEqual(len(second['results']), 12)
+        self.assertEqual(first['total'], 36)
+        self.assertEqual(second['total'], 36)
         self.assertEqual(first['source'], 'website')
         self.assertEqual(second['source'], 'website')
         self.assertFalse(second['has_more'])
         self.assertEqual(fallback.calls, ['第二季'])
         self.assertEqual(self.source.calls, [])
         self.assertEqual(len({row['series_id'] for row in first['results'] + second['results']}), 36)
+
+    def test_website_snapshot_exposes_all_107_results_across_pages(self):
+        fallback = Fallback([{'series_id': str(index), 'title': '官网剧' + str(index)}
+                             for index in range(1, 108)])
+        self.search = SearchPages(self.source, self.cache, fallback, website_only=True)
+        page, _ = self.page('第二季')
+        rows = list(page['results'])
+        while page['has_more']:
+            page, _ = self.page('第二季', page['next_cursor'])
+            rows.extend(page['results'])
+        self.assertEqual(len(rows), 107)
+        self.assertEqual(page['total'], 107)
+        self.assertEqual(len({row['series_id'] for row in rows}), 107)
+        self.assertEqual(fallback.calls, ['第二季'])
+        self.assertEqual(self.source.calls, [])
 
     def test_website_failure_does_not_switch_back_to_legacy(self):
         fallback = Fallback([])

@@ -13,12 +13,13 @@ SEARCH_URL = "https://hongguoduanju.com/search/{}"
 MAX_BODY = 256 * 1024
 MAX_DETAIL_BODY = 512 * 1024
 MAX_SEARCH_BODY = 768 * 1024
-MAX_RESULTS = 50
+MAX_RESULTS = 250
 SUGGEST_COUNT = 20
-MAX_DISCOVERY_QUERIES = 4
+MAX_DISCOVERY_QUERIES = 80
+DISCOVERY_BATCH_SIZE = 6
 DETAIL_WORKERS = 6
 SOURCE_WORKERS = 2
-DISCOVERY_WORKERS = 4
+DISCOVERY_WORKERS = 8
 MAX_SOURCE_DETAILS = 8
 TOTAL_BUDGET = 22
 DETAIL_BUDGET = 6
@@ -48,52 +49,84 @@ class HongguoWebSearch:
 
     def search(self, query, count=MAX_RESULTS):
         deadline = time.monotonic() + self.total_budget
-        first_error = None
-        try:
-            first_items = self._suggest(query)
-            successful = True
-        except Exception as exc:
-            first_items, first_error, successful = [], exc, False
-        queries = self._discovery_queries(query, first_items)
-        tasks = [("page", query, self.discovery_pool.submit(self._search_page, query))]
-        for expanded in queries[1:]:
-            tasks.append(("suggest", expanded, self.discovery_pool.submit(self._suggest, expanded)))
-            tasks.append(("page", expanded, self.discovery_pool.submit(self._search_page, expanded)))
-        completed, unfinished = wait([task[2] for task in tasks],
-                                     timeout=max(0, deadline - time.monotonic()))
-        for future in unfinished:
-            future.cancel()
-        batches = [first_items]
-        for _, _, future in tasks:
-            if future not in completed:
+        requested = min(max(int(count), 1), MAX_RESULTS)
+        aliases = self._season_aliases(query)
+        queue = [str(query).strip()]
+        for alias in aliases[1:]:
+            if alias not in queue:
+                queue.append(alias)
+        processed, results, positions = set(), [], {}
+        successful, first_error, target = False, None, None
+
+        # The public page exposes only its first ten cards, while totalCount is
+        # the number shown to users. Its own related-query suggestions provide
+        # the remaining official cards. Walk that official graph in stable,
+        # bounded batches until the original page's declared total is present.
+        while queue and len(processed) < MAX_DISCOVERY_QUERIES and time.monotonic() < deadline:
+            batch = []
+            while queue and len(batch) < DISCOVERY_BATCH_SIZE:
+                expanded = queue.pop(0)
+                if expanded not in processed:
+                    processed.add(expanded)
+                    batch.append(expanded)
+            if not batch:
                 continue
-            try:
-                batches.append(future.result())
-                successful = True
-            except Exception:
-                continue
+            tasks = {}
+            for expanded in batch:
+                tasks[(expanded, "suggest")] = self.discovery_pool.submit(self._suggest, expanded)
+                tasks[(expanded, "page")] = self.discovery_pool.submit(self._search_page, expanded)
+            completed, unfinished = wait(list(tasks.values()),
+                                         timeout=max(0, deadline - time.monotonic()))
+            for future in unfinished:
+                future.cancel()
+            for expanded in batch:
+                suggestion = []
+                page_items = []
+                for kind in ("suggest", "page"):
+                    future = tasks[(expanded, kind)]
+                    if future not in completed:
+                        continue
+                    try:
+                        value = future.result()
+                        successful = True
+                        if kind == "suggest":
+                            suggestion = value
+                        else:
+                            page_items = value["items"]
+                            if expanded == str(query).strip() and value["total"] is not None:
+                                target = min(requested, value["total"])
+                    except Exception as exc:
+                        if first_error is None:
+                            first_error = exc
+                for items in (suggestion, page_items):
+                    self._merge(items, results, positions, aliases)
+                if aliases:
+                    for related in self._related_queries(suggestion, aliases):
+                        if related not in processed and related not in queue:
+                            queue.append(related)
+            if target is not None and sum(bool(row["cover"]) for row in results) >= target:
+                break
+            # Recursive expansion is only safe for explicit season searches;
+            # ordinary title searches stay on their exact query.
+            if not aliases:
+                break
         if not successful:
             raise first_error or ValueError("Website search unavailable")
-        results, positions = [], {}
-        for items in batches:
-            for item in items:
-                row = self._row(item)
-                if not row:
-                    continue
-                position = positions.get(row["series_id"])
-                if position is None:
-                    positions[row["series_id"]] = len(results)
-                    results.append(row)
-                elif row["cover"] and not results[position]["cover"]:
-                    results[position] = row
-        # Broad website searches can contain fuzzy matches. A season query is
-        # useful only when every returned card still names that exact season.
-        aliases = self._season_aliases(query)
-        if aliases:
-            exact = [row for row in results if any(alias in row["title"] for alias in aliases)]
-            if exact:
-                results = exact
-        return self._enrich(results[:min(max(count, 1), MAX_RESULTS)], deadline)
+        enriched = self._enrich(results[:MAX_RESULTS], deadline)
+        return enriched[:target if target is not None else requested]
+
+    @staticmethod
+    def _merge(items, results, positions, aliases):
+        for item in items:
+            row = HongguoWebSearch._row(item)
+            if not row or aliases and not any(alias in row["title"] for alias in aliases):
+                continue
+            position = positions.get(row["series_id"])
+            if position is None:
+                positions[row["series_id"]] = len(results)
+                results.append(row)
+            elif row["cover"] and not results[position]["cover"]:
+                results[position] = row
 
     def _suggest(self, query):
         response = self.session.get(
@@ -140,7 +173,12 @@ class HongguoWebSearch:
         items = page.get("searchList") if isinstance(page, dict) else None
         if not isinstance(page, dict) or page.get("isSuccess") is not True or not isinstance(items, list):
             raise ValueError("Invalid website search data")
-        return items
+        total = page.get("totalCount")
+        if isinstance(total, str) and re.fullmatch(r"\d{1,6}", total):
+            total = int(total)
+        if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+            total = None
+        return {"items": items, "total": min(total, MAX_RESULTS) if total is not None else None}
 
     @classmethod
     def _season_aliases(cls, query):
@@ -155,21 +193,15 @@ class HongguoWebSearch:
         return ()
 
     @classmethod
-    def _discovery_queries(cls, query, items):
-        queries = [query]
-        for alias in cls._season_aliases(query)[1:]:
-            if alias not in queries:
-                queries.append(alias)
-        aliases = cls._season_aliases(query) or (query,)
+    def _related_queries(cls, items, aliases):
+        queries = []
         for item in items:
             if not isinstance(item, dict) or item.get("word_type") != "common_query":
                 continue
             name = str(item.get("name") or "").strip()
             if name and any(alias in name for alias in aliases) and name not in queries:
                 queries.append(name)
-            if len(queries) >= MAX_DISCOVERY_QUERIES:
-                break
-        return queries[:MAX_DISCOVERY_QUERIES]
+        return queries
 
     def _enrich(self, results, deadline):
         missing = [(index, row) for index, row in enumerate(results) if not row["cover"]]
@@ -247,6 +279,8 @@ class HongguoWebSearch:
     @staticmethod
     def _row(item):
         if not isinstance(item, dict):
+            return None
+        if item.get("word_type") == "common_query":
             return None
         video = item.get("video_data")
         video = video if isinstance(video, dict) else {}

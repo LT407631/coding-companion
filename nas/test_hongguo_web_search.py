@@ -20,8 +20,9 @@ class Response:
 
 
 class Session:
-    def __init__(self, payload, details=None, pages=None):
+    def __init__(self, payload, details=None, pages=None, totals=None):
         self.payload, self.details, self.pages = payload, details or {}, pages or {}
+        self.totals = totals or {}
         self.calls = []
 
     def get(self, url, **options):
@@ -35,12 +36,17 @@ class Session:
             return Response(content=("<script>window._ROUTER_DATA=" + json.dumps(loader) + "</script>").encode())
         if "/search/" in url:
             query = unquote(url.rsplit("/", 1)[-1])
-            loader = {"loaderData": {"search_(keyword)/page": {
-                "isSuccess": True, "query": query, "searchList": self.pages.get(query, [])}}}
+            page = {"isSuccess": True, "query": query, "searchList": self.pages.get(query, [])}
+            if query in self.totals:
+                page["totalCount"] = str(self.totals[query])
+            loader = {"loaderData": {"search_(keyword)/page": page}}
             return Response(content=("<script>window._ROUTER_DATA=" + json.dumps(loader) + "</script>").encode())
-        if isinstance(self.payload, Exception):
-            raise self.payload
-        return Response(self.payload)
+        payload = self.payload
+        if isinstance(payload, dict) and "suggest_list" not in payload:
+            payload = payload.get(options["params"]["query"], {"suggest_list": []})
+        if isinstance(payload, Exception):
+            raise payload
+        return Response(payload)
 
 
 class HongguoWebSearchTests(unittest.TestCase):
@@ -88,6 +94,46 @@ class HongguoWebSearchTests(unittest.TestCase):
         queries = [call[1]["params"]["query"] for call in session.calls
                    if call[0].endswith("/suggestion")]
         self.assertEqual(set(queries), {"第二季", "第2季", "第二季上新"})
+
+    def test_walks_official_related_queries_until_declared_total(self):
+        def item(series_id, title):
+            return {"keyword": series_id, "name": title, "word_type": "short_play_name",
+                    "video_data": {"series_id": series_id, "series_title": title,
+                                   "series_cover": "https://example/" + series_id}}
+
+        suggestions = {
+            "第二季": {"suggest_list": [
+                item("1", "甲第二季"),
+                {"keyword": "q1", "name": "第二季新剧", "word_type": "common_query"}]},
+            "第2季": {"suggest_list": [item("2", "乙第2季")]},
+            "第二季新剧": {"suggest_list": [
+                item("3", "丙第二季"),
+                {"keyword": "q2", "name": "好看的第二季", "word_type": "common_query"}]},
+            "好看的第二季": {"suggest_list": [item("4", "丁第二季"), item("5", "戊第二季")]},
+        }
+        session = Session(suggestions, totals={"第二季": 5})
+        rows = HongguoWebSearch(session).search("第二季")
+        self.assertEqual([row["series_id"] for row in rows], ["1", "2", "3", "4", "5"])
+        self.assertEqual(len({row["series_id"] for row in rows}), 5)
+        queried = [call[1]["params"]["query"] for call in session.calls
+                   if call[0].endswith("/suggestion")]
+        self.assertIn("好看的第二季", queried)
+
+    def test_declared_total_stops_related_graph_without_overfetching(self):
+        def item(series_id):
+            return {"keyword": series_id, "name": "剧" + series_id + "第二季",
+                    "word_type": "short_play_name", "video_data": {
+                        "series_id": series_id, "series_title": "剧" + series_id + "第二季",
+                        "series_cover": "https://example/" + series_id}}
+
+        session = Session({"第二季": {"suggest_list": [item("1"), item("2"),
+                          {"keyword": "later", "name": "稍后第二季", "word_type": "common_query"}]}},
+                          totals={"第二季": 2})
+        rows = HongguoWebSearch(session).search("第二季")
+        self.assertEqual([row["series_id"] for row in rows], ["1", "2"])
+        queried = [call[1]["params"]["query"] for call in session.calls
+                   if call[0].endswith("/suggestion")]
+        self.assertNotIn("稍后第二季", queried)
 
     def test_unresolved_suggestion_token_is_not_returned_as_a_series(self):
         session = Session({"suggest_list": [{"keyword": "123", "name": "保留", "video_data": {}}]},

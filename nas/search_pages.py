@@ -20,6 +20,7 @@ MAX_SEEN = 4096
 MAX_EMPTY_PAGES = 3
 # A website snapshot is created once, then sliced without another upstream call.
 WEBSITE_PAGE_SIZE = 24
+MAX_WEBSITE_RESULTS = 250
 CURSOR_PATTERN = r'^(?:[0-9a-f]{64})?$'
 
 
@@ -63,7 +64,7 @@ class SearchPages:
             raise HTTPException(400, '搜索游标无效')
         namespace = _namespace(self.source)
         if self.website_only:
-            namespace += ':website-only-v2'
+            namespace += ':website-only-v3'
         state = None
         if cursor:
             entry = self.cache.read('search-cursor-v1:' + cursor)
@@ -203,7 +204,7 @@ class SearchPages:
             clean = json.loads(entry.body)
         else:
             results = self.fallback.search(state['query'])
-            if not isinstance(results, list) or len(results) > 50:
+            if not isinstance(results, list) or len(results) > MAX_WEBSITE_RESULTS:
                 raise ValueError('Invalid fallback search results')
             clean, seen = [], set()
             for row in results:
@@ -232,7 +233,8 @@ class SearchPages:
                            generation=self.cache.generation)
         return Payload(json_bytes({'query': state['query'], 'results': clean[offset:end],
                                    'has_more': more, 'next_cursor': next_cursor,
-                                   'source_fallback': True, 'source': 'website'}))
+                                   'source_fallback': True, 'source': 'website',
+                                   'total': len(clean)}))
 
 
 def install_search(app, source, cache, fallback=None, website_only=False):
