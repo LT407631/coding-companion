@@ -62,7 +62,7 @@
       root.innerHTML = '<section class="library" aria-label="首页剧集">' +
         '<div class="library-toolbar"><div class="library-orders" role="group" aria-label="剧集排序">' +
         ['latest', 'hot'].map(function(value) { return '<button class="ghost library-order' + (value === order ? ' on' : '') + '" data-order="' + value + '" aria-pressed="' + (value === order) + '">' + (value === 'latest' ? '最新上架' : '热门剧集') + '</button>'; }).join('') +
-        '<button class="ghost library-refresh" hidden>发现新内容 · 刷新</button></div><span class="note library-count" aria-live="polite"></span></div>' +
+        '<button class="ghost library-random" type="button">随机看一部</button><button class="ghost library-refresh" hidden>发现新内容 · 刷新</button></div><span class="note library-count" aria-live="polite"></span></div>' +
         '<div class="chips library-themes"><button class="chip' + (!theme ? ' on' : '') + '" data-theme="">全部</button>' +
         themes.map(function(t) { return '<button class="chip' + (t.name === theme ? ' on' : '') + '" data-theme="' + esc(t.name) + '">' + esc(t.name) + '</button>'; }).join('') + '</div>' +
         '<div class="grid library-grid"></div><div class="library-footer"><span class="note library-status" role="status"></span><button class="ghost library-more">继续浏览</button></div></section>';
@@ -160,6 +160,9 @@
       root.querySelectorAll('[data-theme]').forEach(function(button, index) {
         button.addEventListener('click', function() { if (button.dataset.theme !== theme) open(order, button.dataset.theme, false, '.library-themes button:nth-child(' + (index + 1) + ')'); });
       });
+      root.querySelector('.library-random').onclick = function() {
+        if (window.CodingRandomPlay) CodingRandomPlay.start({genre: options.genre, order: order, theme: theme}, this);
+      };
       root.querySelector('.library-refresh').onclick = function() {
         if (!current.fresh) return;
         remember(key, current.fresh); open(order, theme, false, '.library-order.on');

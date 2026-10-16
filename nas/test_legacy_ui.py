@@ -23,7 +23,7 @@ class LegacyUiTest(unittest.TestCase):
         sources = [WEB / "app.html"]
         sources += [WEB / "assets" / name for name in (
             "profiles.js", "watch-state.js", "watch-ui.js", "library-store.js",
-            "library-scroll.js", "library-grid.js", "library.js", "device-media.js",
+            "library-scroll.js", "library-grid.js", "random-play.js", "library.js", "device-media.js",
             "seasons.js", "settings.js", "page-requests.js", "search.js",
             "playback-status.js", "device-crypto.js", "device-worker.js",
             "library.css", "watch-ui.css",

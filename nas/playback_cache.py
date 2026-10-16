@@ -218,7 +218,7 @@ class PlaybackCache:
                 for p in self.root.glob(vid + ".work*"):
                     p.unlink(missing_ok=True)
 
-    def prepare(self, client, sid, eps, ep, completed=0, retry=False):
+    def prepare(self, client, sid, eps, ep, completed=0, retry=False, preview=False):
         with self.guard:
             self.closed = {k: t for k, t in self.closed.items() if t > time.monotonic()}
             if client in self.closed:
@@ -233,13 +233,14 @@ class PlaybackCache:
                 self._persist()
             mode = self.settings["mode"]
             full = mode == "full" or (mode == "smart" and completed >= self.settings["smart_after"])
-            count = len(by_ep) if full else (0 if mode == "off" else self.settings["ahead"])
+            count = 0 if preview else (len(by_ep) if full else (0 if mode == "off" else self.settings["ahead"]))
             previous = self.sessions.get(client, {})
             same = previous.get("sid") == sid and previous.get("ep") == ep
             paused = same and previous.get("cache_paused", False) and not retry
             ended = same and previous.get("ended", False) and not retry
             wanted = {n for n in by_ep if ep <= n <= ep + (0 if paused else count) and not (ended and n == ep)}
-            self.sessions[client] = {"sid": sid, "ep": ep, "wanted": wanted, "until": time.monotonic() + 60, "cache_paused": paused, "ended": ended}
+            self.sessions[client] = {"sid": sid, "ep": ep, "wanted": wanted, "until": time.monotonic() + 60,
+                                     "cache_paused": paused, "ended": ended, "preview": bool(preview)}
             active = list(self._active())
             # Discard obsolete waiting jobs; an in-progress preparation can finish safely.
             self.jobs = {k: v for k, v in self.jobs.items() if any(s["sid"] == k[0] and k[1] in s["wanted"] for s in active)}

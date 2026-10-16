@@ -2,12 +2,14 @@
 import hashlib
 import json
 import re
+import secrets
 import time
 import uuid
 from typing import Literal
 
 from fastapi import HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
 from catalog_cache import Payload, json_bytes, not_modified, response_headers
 
@@ -80,6 +82,22 @@ class Library:
         # Existing bounded worker pool, single flight and outage backoff apply.
         return self.cache.refresh(key, warm)
 
+    def random_item(self, genre, order, theme='', exclude=()):
+        """Choose from three real catalogue pages without inventing titles."""
+        blocked = {str(value) for value in exclude}
+        cursor, candidates = '', []
+        for _ in range(3):
+            entry, _ = self.page(genre, order, theme, cursor)
+            page = json.loads(entry.body)
+            candidates.extend(item for item in page.get('items', [])
+                              if str(item.get('series_id', '')) not in blocked)
+            cursor = page.get('next_cursor') or ''
+            if not page.get('has_more') or not cursor:
+                break
+        if not candidates:
+            raise HTTPException(404, '当前筛选范围暂时没有新的随机剧集')
+        return secrets.choice(candidates)
+
     def _read(self, params, state):
         h = self.source
         ranked = params['genre'] == 'comic_series' and params['order'] == 'hot' and not params['theme']
@@ -130,6 +148,13 @@ class Library:
         return items, more, offset, session if ranked else str(data.get('session_id') or session)
 
 
+class RandomRequest(BaseModel):
+    genre: Literal['short_play', 'comic_series', 'ai_series'] = 'comic_series'
+    order: Literal['latest', 'hot'] = 'latest'
+    theme: str = Field(default='', max_length=80)
+    exclude: list[str] = Field(default_factory=list, max_length=300)
+
+
 def install_library(app, source, cache):
     library = Library(source, cache)
 
@@ -145,5 +170,13 @@ def install_library(app, source, cache):
         if not_modified(request.headers.get('if-none-match'), entry.etag):
             return Response(status_code=304, headers=headers)
         return Response(entry.body, media_type=entry.media_type, headers=headers)
+
+    @app.post('/library/random')
+    def random_library(body: RandomRequest):
+        if any(not re.fullmatch(r'\d{1,24}', str(value)) for value in body.exclude):
+            raise HTTPException(400, '随机排除列表无效')
+        item = library.random_item(body.genre, body.order, body.theme, body.exclude)
+        return Response(json_bytes({'item': item}), media_type='application/json',
+                        headers={'Cache-Control': 'no-store'})
 
     return library

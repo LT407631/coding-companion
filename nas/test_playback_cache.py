@@ -97,6 +97,13 @@ class CacheTests(unittest.TestCase):
         self.c.prepare('viewer-one', '2001', EPS, 7)
         self.assertEqual(list(self.c.jobs), [('2001', 7)])
 
+    def test_random_preview_only_queues_current_episode(self):
+        self.c.configure({**self.c.settings, 'mode': 'full'})
+        status = self.c.prepare('preview-user', '2001', EPS, 3, preview=True)
+        self.assertEqual(status['queued'], 1)
+        self.assertEqual(self.c.sessions['preview-user']['wanted'], {3})
+        self.assertTrue(self.c.sessions['preview-user']['preview'])
+
     def test_settings_and_series_persist(self):
         self.c.configure({**self.c.settings, 'ahead': 3, 'mode': 'full'})
         self.c.prepare('viewer-one', '2001', EPS, 1)

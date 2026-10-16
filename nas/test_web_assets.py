@@ -17,7 +17,7 @@ class WebAssetsTest(unittest.TestCase):
         context = {'__file__': str(source), 'Path': Path, 'HTTPException': NotFound,
                    'FileResponse': lambda path, headers: (path, headers)}
         exec(compile(ast.Module(body=[handler], type_ignores=[]), str(source), 'exec'), context)
-        for name in ['seasons.js', 'watch-state.js', 'watch-ui.js', 'watch-ui.css', 'settings.js', 'page-requests.js', 'library.js', 'library-store.js', 'library-scroll.js', 'device-media.js', 'search.js', 'playback-status.js', 'legacy-polyfills.js', 'legacy-app.js', 'legacy-worker.js', 'legacy.css']:
+        for name in ['seasons.js', 'watch-state.js', 'watch-ui.js', 'watch-ui.css', 'settings.js', 'page-requests.js', 'random-play.js', 'library.js', 'library-store.js', 'library-scroll.js', 'device-media.js', 'search.js', 'playback-status.js', 'legacy-polyfills.js', 'legacy-app.js', 'legacy-worker.js', 'legacy.css']:
             path, headers = context['browser_asset'](name)
             self.assertTrue(path.is_file())
             self.assertIn('private', headers['Cache-Control'])
@@ -61,6 +61,25 @@ class WebAssetsTest(unittest.TestCase):
         self.assertLess(page.index('W.setQuality ='), page.index('CodingWebTransition.create(W'))
         self.assertIn('quality: str = Query("auto"', server)
         self.assertIn('vid + "q" + quality.removesuffix("p")', server)
+
+    def test_random_preview_is_explicit_no_history_and_current_episode_only(self):
+        web = Path(__file__).with_name('web')
+        page = web.joinpath('app.html').read_text()
+        library = web.joinpath('assets', 'library.js').read_text()
+        random_play = web.joinpath('assets', 'random-play.js').read_text()
+        self.assertIn('随机看一部', library)
+        self.assertIn("CodingRandomPlay.start({genre: options.genre, order: order, theme: theme}", library)
+        self.assertIn("preview: !!W.random", page)
+        self.assertIn("if (W.random) { CodingRandomPlay.ended(W); return; }", page)
+        self.assertIn("if (W.random || !v", page)
+        self.assertIn("rest[2] === 'random'", page)
+        self.assertIn("document.addEventListener('keydown', key, true)", random_play)
+        self.assertIn("event.key === 'ArrowUp' ? -1 : 1", random_play)
+        self.assertIn("event.key === 'Enter') accept", random_play)
+        self.assertIn("stage.addEventListener('touchend'", random_play)
+        self.assertEqual(random_play.count('CodingWatchState.hist.put('), 1)
+        self.assertIn("if (!w || !w.random || !w.sid) return", random_play)
+        self.assertIn('随机试看 · 不记历史', random_play)
 
 
 if __name__ == '__main__':

@@ -561,7 +561,7 @@
 
 <link rel="stylesheet" href="/ui/assets/library.css?v=2">
 <link rel="stylesheet" href="/ui/assets/watch-ui.css?v=1"><script src="/ui/assets/profiles.js?v=1"></script><script src="/ui/assets/watch-state.js?v=2"></script><script src="/ui/assets/watch-ui.js?v=2"></script>
-<script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/library.js?v=8"></script>
+<script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/random-play.js?v=1"></script><script src="/ui/assets/library.js?v=9"></script>
 <script src="/ui/assets/device-media.js?v=direct-1"></script>
 <script src="/ui/assets/seasons.js?v=2"></script><script src="/ui/assets/settings.js?v=5"></script><script src="/ui/assets/page-requests.js?v=1"></script>
 <script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=4"></script>
@@ -866,7 +866,7 @@ function actualPlaybackQuality(video) {
 }
 const W = { sid: null, eps: [], meta: null, ep: 1, auto: true, speed: 1, saveT: null,
   quality: 'auto', qualityValues: PLAYBACK_QUALITIES, actualQualityLabel: '当前：检测中' };
-async function vWatch(sid, ep, resumeAt) {
+async function vWatch(sid, ep, resumeAt, random = false) {
   renderGtabs(true);
   const el = $('#view');
   el.innerHTML = loadingHTML;
@@ -881,7 +881,7 @@ async function vWatch(sid, ep, resumeAt) {
   }
   if (!location.hash.startsWith("#/watch/" + sid + "/")) return;
   W.title = (meta && meta.title) || ''; W.cover = (meta && meta.cover) || '';
-  W.sid = sid; W.eps = eps; W.ep = Math.min(Math.max(1, ep|0), eps.length);
+  W.sid = sid; W.eps = eps; W.ep = Math.min(Math.max(1, ep|0), eps.length); W.random = !!random;
   W.resumeAt = resumeAt;
   el.innerHTML = `
   <div class="watch">
@@ -891,25 +891,26 @@ async function vWatch(sid, ep, resumeAt) {
         <div class="tip" id="vtip">正在准备第${W.ep}集</div>
         <button class="ghost" id="vstart" style="display:none;color:#fff" onclick="W.play()">开始播放</button>
         <button class="ghost" id="vretry" style="display:none;color:#fff" onclick="W.load(W.ep, false, true)">重试本集</button></div>
+      ${W.random ? CodingRandomPlay.controls() : ''}
     </div>
     <div class="epdrawer" id="drawer">
       <div class="watch-heading">
-        <button class="back" onclick="go('#/detail/${sid}')" aria-label="返回剧集详情">
+        <button class="back" onclick="go('${W.random ? '#/discover' : '#/detail/' + sid}')" aria-label="${W.random ? '退出随机试看' : '返回剧集详情'}">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
         </button>
         <div class="wt" id="wtitle"></div>
       </div>
-      <div class="watch-actions">
+      ${W.random ? '<div class="watch-actions random-drawer-note">试看不记历史；电视按 ↑ 上一部、↓ 换一部、OK 喜欢继续，选中后进入正常连播。</div>' : `<div class="watch-actions">
         <button class="ghost" onclick="W.step(-1)">上一集</button>
         <button class="ghost" onclick="W.step(1)">下一集</button>
         <button class="autoc ${W.auto?'on':''}" id="autoc" onclick="W.toggleAuto()" aria-pressed="${W.auto}">自动连播</button>
         <button class="ghost" id="next-season" type="button" hidden>下一季</button>
-      </div>
+      </div>`}
       <div class="quality-row"><label for="quality-select">清晰度
         <select id="quality-select" aria-label="播放清晰度">${playbackQualityOptions(W.quality)}</select></label>
         <span class="quality-actual" id="quality-actual">${W.actualQualityLabel}</span></div>
-      <div class="dh">选集（${eps.length}）</div><div class="note" id="cache-progress" style="padding:0 18px 12px">正在连接缓存队列…</div>
-      <div class="dlist">
+      <div class="dh">${W.random ? '随机试看第1集' : '选集（' + eps.length + '）'}</div><div class="note" id="cache-progress" style="padding:0 18px 12px">正在连接缓存队列…</div>
+      <div class="dlist"${W.random ? ' hidden' : ''}>
         ${eps.map(e => `<div class="ditem ${e.index===W.ep?'cur':''}" data-ep="${e.index}" onclick="W.load(${e.index})">
           <span class="no">第${e.index}集</span><span class="dt">未缓存</span></div>`).join('')}
       </div>
@@ -917,9 +918,10 @@ async function vWatch(sid, ep, resumeAt) {
   </div>`;
   W.bind();
   W.nextSeason = null;
-  bindNextSeasonButton(sid, $('#next-season'), next => {
-    if (W.sid === sid && $('#next-season')?.isConnected) W.nextSeason = next;
-  });
+  if (W.random) { CodingRandomPlay.resume(sid); CodingRandomPlay.bind(W); }
+  else bindNextSeasonButton(sid, $('#next-season'), next => {
+      if (W.sid === sid && $('#next-season')?.isConnected) W.nextSeason = next;
+    });
   W.load(W.ep, true);
 }
 
@@ -938,11 +940,12 @@ W.bind = () => {
   $('#watch-toggle').textContent = '收起选集';
   $('#watch-toggle').setAttribute('aria-expanded', 'true');
   W.toggleAuto = () => {
-    W.auto = !W.auto; $('#autoc').classList.toggle('on', W.auto);
-    $('#autoc').setAttribute('aria-pressed', String(W.auto));
+    const button = $('#autoc'); if (!button) return;
+    W.auto = !W.auto; button.classList.toggle('on', W.auto);
+    button.setAttribute('aria-pressed', String(W.auto));
     toast(W.auto ? '自动连播已开启' : '自动连播已关闭', 1200);
   };
-  W.step = d => { const n = W.ep + d; if (n >= 1 && n <= W.eps.length) W.load(n); };
+  W.step = d => { if (W.random) { CodingRandomPlay.shift(d); return; } const n = W.ep + d; if (n >= 1 && n <= W.eps.length) W.load(n); };
   W.client = 'viewer-' + (crypto.randomUUID?.() || Date.now() + '-' + Math.random().toString(36).slice(2));
   W.completed = 0;
   W.token = 0;
@@ -951,7 +954,7 @@ W.bind = () => {
   W.deviceError = null; W.device = null;
   W.mode = typeof DeviceMedia !== 'undefined' ? DeviceMedia.mode() :
     (typeof location !== 'undefined' && !/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname) ? 'device' : 'nas');
-  if (W.quality !== 'auto') W.mode = 'nas';
+  if (W.random || W.quality !== 'auto') W.mode = 'nas';
   let mediaRetry = 0, pollFailures = 0, pollFailureAt = 0;
   const client = W.client;
   let transition = null;
@@ -1025,7 +1028,7 @@ W.bind = () => {
       return W.device.select(W.ep, retry);
     }
     const token = W.token, n = W.ep;
-    const body = {client, series_id: W.sid, ep: n, completed: W.completed, retry};
+    const body = {client, series_id: W.sid, ep: n, completed: W.completed, retry, preview: !!W.random};
     const prepare = async () => update(await post('/playback/prepare', body), n, token);
     return window.CodingTVTransition ? CodingTVTransition.run(W, prepare) : prepare();
   };
@@ -1035,8 +1038,8 @@ W.bind = () => {
     if (!W.alive) { go(`#/watch/${W.sid}/${n}`); return; }
     const qualityPosition = qualityChange && Number.isFinite(v.currentTime) ? v.currentTime : 0;
     W.save();
-    const rec = hist.get(W.sid);
-    W.resumePos = qualityChange ? qualityPosition : first && W.resumeAt !== undefined ? Math.max(0, Number(W.resumeAt) || 0) :
+    const rec = W.random ? null : hist.get(W.sid);
+    W.resumePos = W.random ? 0 : qualityChange ? qualityPosition : first && W.resumeAt !== undefined ? Math.max(0, Number(W.resumeAt) || 0) :
       (first || retry) && rec && Number(rec.ep) === n && !rec.finished ? Math.max(0, Number(rec.pos) || 0) : 0;
     W.mediaReady = false; W.metadataReady = false; W.finished = false; W.saveT = null;
     W.actualQualityLabel = '当前：检测中';
@@ -1056,7 +1059,7 @@ W.bind = () => {
     $('#wtitle').textContent = `${W.title ? W.title + ' · ' : ''}第${n}集`;
     $('#wtitle').title = $('#wtitle').textContent;
     $('#watch-series').textContent = W.title || '当前剧集';
-    $('#watch-position').textContent = `第 ${n} 集 / 共 ${W.eps.length} 集`;
+    $('#watch-position').textContent = W.random ? '随机试看 · 第1集' : `第 ${n} 集 / 共 ${W.eps.length} 集`;
     $('#watch-episode').title = $('#wtitle').textContent;
     document.title = `${W.title ? W.title + ' · ' : ''}第${n}集 · coding伴侣`;
     document.querySelectorAll('.ditem').forEach(x => x.classList.toggle('cur', +x.dataset.ep === n));
@@ -1134,6 +1137,7 @@ W.bind = () => {
     if (!W.alive || W.client !== client || finishedToken === W.token) return;
     const token = W.token, ep = W.ep;
     finishedToken = token;
+    if (W.random) { CodingRandomPlay.ended(W); return; }
     W.save(true);
     W.completed++;
     const completion = (async () => { try {
@@ -1165,14 +1169,14 @@ W.bind = () => {
 };
 W.save = finished => {
   const v = W.video;
-  if (!v || !W.sid || !W.alive || !W.mediaReady || W.activeEp !== W.ep || v.seeking || W.finished) return;
+  if (W.random || !v || !W.sid || !W.alive || !W.mediaReady || W.activeEp !== W.ep || v.seeking || W.finished) return;
   const dur = v.duration || 0, pos = v.currentTime || 0;
   if (!Number.isFinite(dur) || dur <= 0 || !Number.isFinite(pos)) return;
   hist.put({ sid: W.sid, title: W.title || '', cover: W.cover || '',
              ep: W.ep, epCnt: W.eps.length, pos: Math.min(pos, dur), dur, finished: !!finished });
   if (finished) W.finished = true;
 };
-W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility','nextSeason','setQuality','refreshQuality']) delete W[key]; };
+W.release = () => { W.stop?.(); for (const key of ['video','device','play','toggleDrawer','toggleAuto','step','prepare','load','stop','unload','visibility','nextSeason','setQuality','refreshQuality','random']) delete W[key]; };
 /* ================= 视图: 收藏 ================= */
 async function vFav() {
   renderGtabs(true); await CodingWatchState.ready(); if (location.hash !== '#/fav') return;
@@ -1264,11 +1268,14 @@ function route() {
   document.body.classList.toggle('watching', view === 'watch' && !!rest[0]);
   $('#watch-series').textContent = view === 'watch' && rest[0] ? '正在读取剧集…' : '';
   $('#watch-position').textContent = '';
-  if (view === 'watch' && rest[0]) $('#watch-back').href = '#/detail/' + encodeURIComponent(rest[0]);
+  if (view === 'watch' && rest[0]) $('#watch-back').href = rest[2] === 'random' ? '#/discover' : '#/detail/' + encodeURIComponent(rest[0]);
   document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.dataset.nav === view));
   window.scrollTo(0, 0);
   if (view === 'detail' && rest[0]) vDetail(rest[0]);
-  else if (view === 'watch' && rest[0]) vWatch(rest[0], parseInt(rest[1] || '1', 10), rest[2] === undefined ? undefined : Number(rest[2]));
+  else if (view === 'watch' && rest[0]) {
+    const random = rest[2] === 'random';
+    vWatch(rest[0], parseInt(rest[1] || '1', 10), random || rest[2] === undefined ? undefined : Number(rest[2]), random);
+  }
   else if (view === 'search') vSearch(decodeURIComponent(rest.join('/') || ''));
   else if (view === 'rank') vRank();
   else if (view === 'fav') vFav();

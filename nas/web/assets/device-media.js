@@ -14,7 +14,7 @@
     return /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||h==='[::1]'?'nas':'device';
   }
   function supported() {
-    if(!root.isSecureContext || !root.crypto?.subtle) throw Error('当前地址不支持设备直连，可继续使用 NAS 播放；如需设备直连可改用 HTTPS');
+    if(!root.isSecureContext || !root.crypto?.subtle) throw Error('设备直连需要 HTTPS，请使用 https://407631.dns.army:8888');
     if(!root.Worker || !root.indexedDB) throw Error('此浏览器不支持设备解密或缓存，请手动选择 NAS 模式');
   }
   class Store {

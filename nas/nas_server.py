@@ -225,7 +225,7 @@ def browser_ui(compat: bool = False):
 
 @app.get("/ui/assets/{name}", include_in_schema=False)
 def browser_asset(name: str):
-    if name not in {"device-media.js", "device-worker.js", "device-crypto.js", "coding-companion.svg", "library.js", "library-grid.js", "library-store.js", "library-scroll.js", "library.css", "settings.js", "page-requests.js", "watch-state.js", "watch-ui.js", "watch-ui.css", "profiles.js", "seasons.js", "search.js", "playback-status.js", "legacy-polyfills.js", "legacy-app.js", "legacy-worker.js", "legacy.css"}:
+    if name not in {"device-media.js", "device-worker.js", "device-crypto.js", "coding-companion.svg", "library.js", "library-grid.js", "library-store.js", "library-scroll.js", "library.css", "random-play.js", "settings.js", "page-requests.js", "watch-state.js", "watch-ui.js", "watch-ui.css", "profiles.js", "seasons.js", "search.js", "playback-status.js", "legacy-polyfills.js", "legacy-app.js", "legacy-worker.js", "legacy.css"}:
         raise HTTPException(404)
     return FileResponse(Path(__file__).parent / "web" / "assets" / name, headers={"Cache-Control": "private, max-age=0, must-revalidate"})
 
@@ -247,6 +247,7 @@ class PrepareRequest(BaseModel):
     ep: int = Field(ge=1, le=10000)
     completed: int = Field(default=0, ge=0, le=10000)
     retry: bool = False
+    preview: bool = False
 
 
 class CloseRequest(BaseModel):
@@ -290,7 +291,7 @@ def save_cache_settings(settings: CacheSettings):
 def prepare(body: PrepareRequest):
     try:
         _, eps = server.H.get_episodes(body.series_id)
-        return playback.prepare(body.client, body.series_id, eps, body.ep, body.completed, body.retry)
+        return playback.prepare(body.client, body.series_id, eps, body.ep, body.completed, body.retry, body.preview)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:

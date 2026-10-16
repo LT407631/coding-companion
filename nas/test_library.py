@@ -5,6 +5,7 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from catalog_cache import CatalogCache
@@ -156,6 +157,16 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(self.page(cursor)['items'][0]['series_id'], '19')
         self.assertEqual(len(self.source.calls), 3)
 
+    def test_random_uses_three_real_pages_and_respects_exclusions(self):
+        blocked = [str(value) for value in range(1, 54)]
+        with patch('library.secrets.choice', side_effect=lambda values: values[0]):
+            item = self.library.random_item('comic_series', 'latest', '', blocked)
+        self.assertEqual(item['series_id'], '54')
+        self.assertEqual(len(self.source.calls), 3)
+        with self.assertRaises(HTTPException) as caught:
+            self.library.random_item('comic_series', 'latest', '', blocked + ['54'])
+        self.assertEqual(caught.exception.status_code, 404)
+
     def test_prefetch_never_blocks_foreground_and_coalesces_requests(self):
         first, _ = self.library.page('comic_series', 'latest')
         original = self.source.api
@@ -224,6 +235,7 @@ class LibraryAuthTests(unittest.TestCase):
 
     def test_anonymous_denied_validated_and_revoked(self):
         self.assertEqual(self.request('/library')[0], 401)
+        self.assertEqual(self.request('/library/random', 'POST', {'genre': 'comic_series'})[0], 401)
         self.assertEqual(self.source.calls, [])
         token, _ = self.login()
         for query in ('order=unknown', 'genre=unknown', 'cursor=../secret', 'theme=' + 'x' * 81):
@@ -232,6 +244,13 @@ class LibraryAuthTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(json.loads(body)['items']), 18)
         self.assertIn('private', headers['cache-control'])
+        status, headers, body = self.request('/library/random', 'POST',
+                                             {'genre': 'comic_series', 'order': 'latest', 'theme': '', 'exclude': ['1']},
+                                             cookie=token)
+        self.assertEqual(status, 200)
+        self.assertNotEqual(json.loads(body)['item']['series_id'], '1')
+        self.assertEqual(headers['cache-control'], 'no-store')
+        self.assertEqual(self.request('/library/random', 'POST', {'exclude': ['bad']}, cookie=token)[0], 400)
         self.auth.logout(token)
         self.assertEqual(self.request('/library', cookie=token)[0], 401)
 
