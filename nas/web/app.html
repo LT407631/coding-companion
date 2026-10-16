@@ -900,7 +900,7 @@ async function vWatch(sid, ep, resumeAt, random = false) {
         </button>
         <div class="wt" id="wtitle"></div>
       </div>
-      ${W.random ? '<div class="watch-actions random-drawer-note">试看不记历史；电视按 ↑ 上一部、↓ 换一部、OK 喜欢继续，选中后进入正常连播。</div>' : `<div class="watch-actions">
+      ${W.random ? '' : `<div class="watch-actions">
         <button class="ghost" onclick="W.step(-1)">上一集</button>
         <button class="ghost" onclick="W.step(1)">下一集</button>
         <button class="autoc ${W.auto?'on':''}" id="autoc" onclick="W.toggleAuto()" aria-pressed="${W.auto}">自动连播</button>

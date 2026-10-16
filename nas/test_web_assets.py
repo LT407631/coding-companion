@@ -79,7 +79,14 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn("stage.addEventListener('touchend'", random_play)
         self.assertEqual(random_play.count('CodingWatchState.hist.put('), 1)
         self.assertIn("if (!w || !w.random || !w.sid) return", random_play)
-        self.assertIn('随机试看 · 不记历史', random_play)
+        self.assertIn('↑ 上一部', random_play)
+        self.assertIn('喜欢，继续看', random_play)
+        self.assertIn('↓ 换一部', random_play)
+        self.assertNotIn('随机试看 · 不记历史', random_play)
+        self.assertNotIn('电视按↑↓换剧', random_play)
+        self.assertNotIn('random-drawer-note', page)
+        css = web.joinpath('assets', 'library.css').read_text()
+        self.assertIn('.legacy-webview .random-preview { display:none !important; }', css)
 
 
 if __name__ == '__main__':

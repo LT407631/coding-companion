@@ -99,16 +99,13 @@
   function current() { return state.trail[state.index] || null; }
   function active() { return /^#\/watch\/\d+\/1\/random$/.test(location.hash); }
   function status(message, error) {
-    var node = document.querySelector('#random-status');
-    if (node) { node.textContent = message; node.classList.toggle('error', !!error); }
+    if (error) toast(message);
   }
   function controls() {
     return '<section class="random-preview" aria-label="随机试看">' +
-      '<span class="random-badge">随机试看 · 不记历史</span>' +
       '<div class="random-actions"><button class="ghost random-prev" type="button">↑ 上一部</button>' +
       '<button class="btn-pink random-accept" type="button">喜欢，继续看</button>' +
-      '<button class="ghost random-next" type="button">↓ 换一部</button></div>' +
-      '<span class="random-status" id="random-status">电视按↑↓换剧、OK喜欢继续 · 网页可按键或上下滑动</span></section>';
+      '<button class="ghost random-next" type="button">↓ 换一部</button></div></section>';
   }
   function resume(sid) {
     sid = String(sid);
