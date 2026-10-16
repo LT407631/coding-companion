@@ -568,7 +568,7 @@
 <script src="/ui/assets/library-store.js?v=1"></script><script src="/ui/assets/library-scroll.js?v=1"></script><script src="/ui/assets/library-grid.js?v=6"></script><script src="/ui/assets/random-play.js?v=1"></script><script src="/ui/assets/library.js?v=9"></script>
 <script src="/ui/assets/device-media.js?v=direct-1"></script>
 <script src="/ui/assets/seasons.js?v=2"></script><script src="/ui/assets/settings.js?v=5"></script><script src="/ui/assets/page-requests.js?v=1"></script>
-<script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=4"></script>
+<script src="/ui/assets/search.js?v=2"></script><script src="/ui/assets/playback-status.js?v=5"></script>
 <script>
 'use strict';
 /* ================= 基础 ================= */
@@ -1062,11 +1062,14 @@ W.bind = () => {
     transition?.quality();
     if (!automatic && !retry && !qualityChange) W.completed = 0;
     if (!retry) mediaRetry = 0;
-    transition?.switching(automatic);
-    v.pause(); v.removeAttribute('src'); v.load();
+    const webCached = transition?.select(n, retry || qualityChange);
+    transition?.switching(automatic, !!webCached);
+    v.pause();
+    if (!webCached) { v.removeAttribute('src'); v.load(); }
     W.ep = n; W.activeEp = 0; W.token++; pollFailures = 0; pollFailureAt = 0;
     W.statusPoll?.select();
-    $('#vload').style.display = 'flex';
+    if (webCached) { transition.hide(); transition.waiting(); }
+    else $('#vload').style.display = 'flex';
     $('#vload .spin').style.display = '';
     $('#vretry').style.display = 'none';
     $('#vstart').style.display = 'none';
@@ -1080,7 +1083,7 @@ W.bind = () => {
     document.querySelectorAll('.ditem').forEach(x => x.classList.toggle('cur', +x.dataset.ep === n));
     document.querySelector('.ditem.cur')?.scrollIntoView({ block: 'nearest' });
     const token = W.token;
-    const cached = window.CodingTVTransition?.cached(W, n, automatic, retry) || transition?.select(n, retry);
+    const cached = window.CodingTVTransition?.cached(W, n, automatic, retry) || webCached;
     if (cached) update(cached, n, token);
     W.prepare(retry).catch(() => { if (token === W.token) fail(W.mode === 'device' ? '设备直连准备失败，请重试或切换 NAS 模式' : '缓存服务暂时无法连接，请重试'); });
   };

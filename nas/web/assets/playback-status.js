@@ -172,6 +172,7 @@
   }
   function create(w, video, overlay) {
     var snapshot = null, replay = null, checked = 0, timer = 0, controlsTimer = 0, browserControls = null;
+    var frame = null, seamless = false;
     var controlsSuppressed = false, controlsWereEnabled = false, controlsReady = false;
     var pointerX = null, pointerY = null, pointerOriginX = null, pointerOriginY = null, ending = false;
     var intentEvents = ['pointerdown', 'mousedown', 'touchstart', 'keydown'];
@@ -212,11 +213,33 @@
       if (video.parentElement) video.parentElement.classList.add('coding-controls-quiet');
       intentEvents.forEach(function (name) { document.addEventListener(name, restoreControls, true); });
     }
-    function switching(automatic) { ending = false; if (automatic) suppressControls(); else restoreControls(); }
+    function clearFrame() {
+      if (frame && frame.parentNode) frame.parentNode.removeChild(frame);
+      frame = null;
+    }
+    function holdFrame() {
+      clearFrame();
+      if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight || !video.parentElement) return;
+      try {
+        var canvas = document.createElement('canvas'), width = Math.min(1280, video.videoWidth);
+        canvas.width = width;
+        canvas.height = Math.max(1, Math.round(video.videoHeight * width / video.videoWidth));
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.className = 'coding-transition-frame';
+        canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:5;pointer-events:none';
+        video.parentElement.insertBefore(canvas, overlay);
+        frame = canvas;
+      } catch (_) { clearFrame(); }
+    }
+    function switching(automatic, cached) {
+      ending = false; seamless = !!cached;
+      if (seamless) holdFrame(); else clearFrame();
+      if (automatic) suppressControls(); else restoreControls();
+    }
     function show() { cancel(); restoreControls(); overlay.style.display = 'flex'; }
     function hide() { cancel(); overlay.style.display = 'none'; }
     function playing() {
-      hide();
+      hide(); clearFrame(); seamless = false;
       if (!controlsSuppressed) return;
       clearTimeout(controlsTimer);
       controlsTimer = setTimeout(function () {
@@ -230,7 +253,7 @@
       timer = setTimeout(function () {
         timer = 0;
         if (w.alive && w.token === token) overlay.style.display = 'flex';
-      }, 450);
+      }, seamless ? 1800 : 450);
     }
     function advances() { return w.alive && w.auto && (w.ep < w.eps.length || !!w.nextSeason); }
     function beforeEnd() {
@@ -253,14 +276,13 @@
         cancel();
         if (retry || !snapshot || Date.now() - checked >= 8000 ||
             snapshot.episodes[n]?.state !== 'ready') return null;
-        hide(); waiting();
         replay = w.mode === 'nas' ? Object.assign({}, snapshot, {current: snapshot.episodes[n]}) : null;
         return replay;
       },
       switching: switching, waiting: waiting, playing: playing, show: show, hide: hide,
       quality: function () { if (browserControls) browserControls.quality(); },
       stop: function () {
-        cancel(); restoreControls();
+        cancel(); clearFrame(); restoreControls();
         if (browserControls) browserControls.stop();
         if (video.removeEventListener) {
           video.removeEventListener('timeupdate', beforeEnd); video.removeEventListener('ended', ended, true);

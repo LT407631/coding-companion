@@ -62,6 +62,21 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn('quality: str = Query("auto"', server)
         self.assertIn('vid + "q" + quality.removesuffix("p")', server)
 
+    def test_cached_web_episode_switch_preserves_frame_and_delays_feedback(self):
+        web = Path(__file__).with_name('web')
+        page = web.joinpath('app.html').read_text()
+        controls = web.joinpath('assets', 'playback-status.js').read_text()
+        load = page[page.index('W.load ='):page.index('let preparing =')]
+        self.assertLess(load.index('transition?.select'), load.index('v.pause();'))
+        self.assertIn("if (!webCached) { v.removeAttribute('src'); v.load(); }", load)
+        self.assertIn('if (webCached) { transition.hide(); transition.waiting(); }', load)
+        self.assertNotIn("transition?.select(n, retry);", load)
+        self.assertIn('/ui/assets/playback-status.js?v=5', page)
+        self.assertIn("canvas.className = 'coding-transition-frame'", controls)
+        self.assertIn('if (seamless) holdFrame(); else clearFrame();', controls)
+        self.assertIn('seamless ? 1800 : 450', controls)
+        self.assertIn('hide(); clearFrame(); seamless = false;', controls)
+
     def test_random_preview_has_sidebar_entry_pool_and_no_history(self):
         web = Path(__file__).with_name('web')
         page = web.joinpath('app.html').read_text()

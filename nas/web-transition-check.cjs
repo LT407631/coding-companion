@@ -1,8 +1,8 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
-let now=1000,id=0;const timers=new Map(),overlay={style:{display:'flex'}},events=new EventTarget(),video=Object.assign(new EventTarget(),{controls:true,duration:45,currentTime:0,paused:false});
+let now=1000,id=0;const timers=new Map(),delays=new Map(),overlay={style:{display:'flex'}},events=new EventTarget(),video=Object.assign(new EventTarget(),{controls:true,duration:45,currentTime:0,paused:false});
 const document={querySelector:()=>overlay,addEventListener:events.addEventListener.bind(events),removeEventListener:events.removeEventListener.bind(events)};
 const pointer=(name,x,y)=>{const event=new Event(name);Object.defineProperties(event,{clientX:{value:x},clientY:{value:y}});return event};
-const ctx={window:{},document,Date:{now:()=>now},setTimeout(fn){timers.set(++id,fn);return id},clearTimeout(i){timers.delete(i)}};
+const ctx={window:{},document,Date:{now:()=>now},setTimeout(fn,delay){timers.set(++id,fn);delays.set(id,delay);return id},clearTimeout(i){timers.delete(i);delays.delete(i)}};
 vm.runInNewContext(fs.readFileSync('nas/web/assets/playback-status.js','utf8'),ctx);
 const w={alive:true,mode:'nas',token:1,auto:true,ep:1,eps:[{},{}]},t=ctx.window.CodingWebTransition.create(w,video);
 events.dispatchEvent(pointer('pointermove',100,100));
@@ -18,13 +18,15 @@ t.switching(false);assert.equal(video.controls,true,'manual switching keeps nati
 video.currentTime=44.2;video.dispatchEvent(new Event('timeupdate'));assert.equal(video.controls,false,'hide before the native player reaches ended, before completion API finishes');
 video.currentTime=10;video.dispatchEvent(new Event('timeupdate'));assert.equal(video.controls,true,'seeking away from the ending restores normal controls');
 t.remember({current:{state:'ready'},episodes:{2:{state:'ready'},3:{state:'queued'}}});
-assert.equal(t.select(2,false).current.state,'ready');assert.equal(overlay.style.display,'none');assert.equal(timers.size,1);
+overlay.style.display='flex';assert.equal(t.select(2,false).current.state,'ready');assert.equal(overlay.style.display,'flex');assert.equal(timers.size,0);
+t.switching(true,true);t.hide();t.waiting();t.waiting();assert.equal(timers.size,1);assert.equal(delays.get([...timers.keys()][0]),1800);
+{ const [key,fn]=[...timers.entries()][0]; timers.delete(key); delays.delete(key); fn(); }assert.equal(overlay.style.display,'flex');
 t.hide();assert.equal(timers.size,0);assert.equal(t.select(3,false),null);assert.equal(t.select(2,true),null);
-t.waiting();t.waiting();assert.equal(timers.size,1);{ const [key,fn]=[...timers.entries()][0]; timers.delete(key); fn(); }assert.equal(overlay.style.display,'flex');
+t.switching(false,false);t.waiting();assert.equal(delays.get([...timers.keys()][0]),450);t.hide();
 t.select(2,false);t.show();assert.equal(overlay.style.display,'flex');assert.equal(timers.size,0);
 now+=8000;assert.equal(t.select(2,false),null);now=1000;w.mode='device';assert.equal(t.select(2,false),null);
 w.mode='nas';t.select(2,false);t.stop();assert.equal(timers.size,0);
-console.log('PASS: fresh NAS cached selection, 450ms feedback, waiting deduplication, playing cancellation, retry/error visibility, expiry, device isolation and stop cleanup');
+console.log('PASS: pure cached selection, 1800ms cached feedback, 450ms normal feedback, waiting deduplication, retry/error visibility, expiry, device isolation and stop cleanup');
 if(!process.env.FULLSCREEN_SAFARI_QA)(async()=>{
  const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  const browser=await chromium.launch({executablePath:process.env.CHROME_BIN || undefined,headless:true});
@@ -42,7 +44,7 @@ if(!process.env.FULLSCREEN_SAFARI_QA)(async()=>{
   const html=fs.readFileSync('nas/web/app.html','utf8');await page.addScriptTag({content:html.slice(html.indexOf('W.bind ='),html.indexOf('W.save ='))});
   await page.evaluate(()=>{W.bind();W.load(1,true)});await page.waitForFunction(()=>W.activeEp===1);
   assert.equal(await page.locator('#vload').evaluate(e=>e.style.display),'flex');
-  await page.evaluate(()=>{window.fetch=()=>new Promise(()=>{});W.load(2,false,false,true)});
+  await page.evaluate(()=>{window.fetch=()=>new Promise(()=>{});W.load(2,true,false,false)});
   assert.equal(await page.locator('#video').getAttribute('src'),'/stream?series_id=qa&ep=2');
   assert.equal(await page.locator('#vload').evaluate(e=>e.style.display),'none');
   assert.equal(await page.locator('#video').evaluate(e=>e.controls),false,'production automatic handoff suppresses native controls before src changes');
@@ -52,6 +54,8 @@ if(!process.env.FULLSCREEN_SAFARI_QA)(async()=>{
   await page.mouse.move(10,10);assert.equal(await page.locator('#video').evaluate(e=>e.controls),false,'first pointer sample after playing only establishes Safari baseline');
   await page.mouse.move(20,20);assert.equal(await page.locator('#video').evaluate(e=>e.controls),true,'meaningful user pointer movement restores controls');
   await page.evaluate(()=>$('#video').dispatchEvent(new Event('waiting')));await page.waitForTimeout(550);
+  assert.equal(await page.locator('#vload').evaluate(e=>e.style.display),'none');
+  await page.waitForTimeout(1400);
   assert.equal(await page.locator('#vload').evaluate(e=>e.style.display),'flex');
   await page.evaluate(()=>{W.stop()});
   await fullscreenCheck(browser);
