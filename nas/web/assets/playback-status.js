@@ -41,35 +41,34 @@
   // Only browser playback: TV owns its native transition and rendering feedback.
   function pageFullscreen(video, hideControls, showControls) {
     var stage = video && video.parentElement;
-    var userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent || '';
-    var tesla = /\bTesla(?:Browser)?\/[\d.]+/i.test(userAgent) || /\bQtCarBrowser\b/i.test(userAgent);
-    var theater = tesla && typeof location !== 'undefined' && /(?:^|[?&])tesla_theater=1(?:&|$)/.test(location.search || '');
+    var theater = typeof location !== 'undefined' && /(?:^|[?&])tesla_theater=1(?:&|$)/.test(location.search || '');
     var fullscreen = stage && (stage.requestFullscreen || stage.webkitRequestFullscreen) &&
       (document.fullscreenEnabled || document.webkitFullscreenEnabled);
-    if (!stage || stage.id !== 'stage' || (!tesla && !fullscreen)) return null;
+    if (!stage || stage.id !== 'stage' || !fullscreen) return null;
     if (!document.getElementById('coding-page-fullscreen-style')) {
       var style = document.createElement('style'); style.id = 'coding-page-fullscreen-style';
       style.textContent = '.coding-page-fullscreen{position:relative}' +
-        '.coding-fullscreen-button,.coding-media-bar button,.coding-media-bar select{padding:7px 10px;border:1px solid #ffffff55;border-radius:8px;background:#14141eee;color:#fff;font:14px sans-serif;cursor:pointer}' +
+        '.coding-fullscreen-button,.coding-tesla-button,.coding-media-bar button,.coding-media-bar select{padding:7px 10px;border:1px solid #ffffff55;border-radius:8px;background:#14141eee;color:#fff;font:14px sans-serif;cursor:pointer}' +
         '.coding-fullscreen-button{position:absolute;right:16px;top:16px;z-index:10}' +
+        '.coding-tesla-button{position:absolute;right:82px;top:16px;z-index:10}' +
         '.coding-media-bar{position:absolute;bottom:16px;left:16px;right:16px;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border-radius:12px;background:#14141eee;color:#fff;font:13px sans-serif;opacity:0;pointer-events:none;transition:opacity .15s}' +
         '.coding-media-bar.is-visible{opacity:1;pointer-events:auto}' +
         '.coding-media-bar input{min-width:0;accent-color:#ff4b7d}.coding-seek{flex:1;width:80px}.coding-volume{width:70px}.coding-media-time{white-space:nowrap}' +
         'html.coding-tesla-theater body{margin:0!important;overflow:hidden!important;background:#000!important}' +
         'html.coding-tesla-theater #stage{position:fixed!important;inset:0!important;z-index:2147483000!important;width:100vw!important;height:100vh!important;height:100dvh!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;background:#000}' +
         'html.coding-tesla-theater #stage video{position:absolute;inset:0;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;object-fit:contain}' +
-        'html.coding-tesla-theater .coding-fullscreen-button{display:none!important}' +
+        'html.coding-tesla-theater .coding-fullscreen-button,html.coding-tesla-theater .coding-tesla-button{display:none!important}' +
         '@media(max-width:600px){.coding-media-bar{left:6px;right:6px;bottom:6px;padding:6px;gap:4px}.coding-media-bar .coding-volume{display:none}.coding-media-bar button,.coding-media-bar select{padding:6px;font-size:12px}}';
       [':fullscreen', ':-webkit-full-screen'].forEach(function (pseudo) {
         var selector = '.coding-page-fullscreen' + pseudo;
         style.textContent += selector + '{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;background:#000;position:relative}' +
-          selector + ' .coding-fullscreen-button:not(.is-visible):not(:focus-visible){opacity:0;pointer-events:none}' +
+          selector + ' .coding-fullscreen-button:not(.is-visible):not(:focus-visible),' + selector + ' .coding-tesla-button:not(.is-visible):not(:focus-visible){opacity:0;pointer-events:none}' +
           selector + ' video{position:absolute;inset:0;width:100%!important;height:100%!important;max-height:none!important;object-fit:contain}';
       });
       document.head.appendChild(style);
     }
     var originalControls = video.controls, timer = 0, x = null, y = null, stopped = false, listeners = [];
-    var button = document.createElement('button'), bar = document.createElement('div');
+    var button = document.createElement('button'), teslaButton = document.createElement('button'), bar = document.createElement('div');
     var adapter = {enabled: true, show: reveal, hide: hide, stop: stop};
     function listen(target, event, fn) { target.addEventListener(event, fn); listeners.push([target, event, fn]); }
     function control(tag, label, className) {
@@ -79,8 +78,10 @@
       bar.appendChild(node); return node;
     }
     button.type = 'button'; button.className = 'coding-fullscreen-button';
-    button.textContent = tesla && !theater ? '隐藏地址栏' : '全屏';
-    button.setAttribute('aria-label', tesla && !theater ? '进入特斯拉影院全屏' : '进入全屏');
+    button.textContent = '全屏';
+    button.setAttribute('aria-label', '进入全屏');
+    teslaButton.type = 'button'; teslaButton.className = 'coding-tesla-button';
+    teslaButton.textContent = '特斯拉全屏'; teslaButton.setAttribute('aria-label', '进入特斯拉影院全屏');
     bar.className = 'coding-media-bar'; bar.setAttribute('aria-label', '播放控制');
     var play = control('button', '播放'), seek = control('input', '播放进度', 'coding-seek');
     seek.type = 'range'; seek.min = '0'; seek.max = '1000'; seek.step = '1'; seek.value = '0';
@@ -98,14 +99,14 @@
       });
     }
     if (video.webkitShowPlaybackTargetPicker) { var airplay = control('button', '投屏'); listen(airplay, 'click', function () { video.webkitShowPlaybackTargetPicker(); }); }
-    stage.classList.add('coding-page-fullscreen'); stage.appendChild(button); stage.appendChild(bar);
+    stage.classList.add('coding-page-fullscreen'); stage.appendChild(button); stage.appendChild(teslaButton); stage.appendChild(bar);
     if (theater) document.documentElement.classList.add('coding-tesla-theater');
     video.controls = false;
     function active() { return (document.fullscreenElement || document.webkitFullscreenElement) === stage; }
-    function hide() { clearTimeout(timer); button.classList.remove('is-visible'); bar.classList.remove('is-visible'); }
+    function hide() { clearTimeout(timer); button.classList.remove('is-visible'); teslaButton.classList.remove('is-visible'); bar.classList.remove('is-visible'); }
     function reveal() {
       if (stopped) return;
-      button.classList.add('is-visible'); bar.classList.add('is-visible'); clearTimeout(timer);
+      button.classList.add('is-visible'); teslaButton.classList.add('is-visible'); bar.classList.add('is-visible'); clearTimeout(timer);
       timer = setTimeout(function () { if (!video.paused) hide(); }, 1800);
     }
     function format(value) { value = isFinite(value) ? Math.max(0, Math.floor(value)) : 0; return Math.floor(value / 60) + ':' + ('0' + value % 60).slice(-2); }
@@ -133,16 +134,16 @@
     }
     function toggle(event) {
       if (event) { event.preventDefault(); event.stopPropagation(); }
-      if (tesla && !theater) {
-        window.open('https://www.youtube.com/redirect?q=' + encodeURIComponent(theaterTarget()), '_blank');
-        return;
-      }
       if (theater) { reveal(); return; }
       try {
         var result = active() ? (document.exitFullscreen || document.webkitExitFullscreen).call(document) :
           (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
         if (result && result.catch) result.catch(failed);
       } catch (_) { failed(); }
+    }
+    function launchTheater(event) {
+      if (event) { event.preventDefault(); event.stopPropagation(); }
+      window.open('https://www.youtube.com/redirect?q=' + encodeURIComponent(theaterTarget()), '_blank');
     }
     function movement(event) {
       if (typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
@@ -162,7 +163,7 @@
       if (stopped) return;
       stopped = true; adapter.enabled = false; clearTimeout(timer);
       listeners.forEach(function (item) { item[0].removeEventListener(item[1], item[2]); });
-      button.remove(); bar.remove(); stage.classList.remove('coding-page-fullscreen', 'coding-controls-quiet'); video.controls = originalControls;
+      button.remove(); teslaButton.remove(); bar.remove(); stage.classList.remove('coding-page-fullscreen', 'coding-controls-quiet'); video.controls = originalControls;
       if (theater) document.documentElement.classList.remove('coding-tesla-theater');
     }
     listen(play, 'click', togglePlay); listen(video, 'click', togglePlay);
@@ -171,7 +172,8 @@
     listen(mute, 'click', function () { video.muted = !video.muted; reveal(); });
     listen(speed, 'change', function () { video.playbackRate = Number(speed.value); reveal(); });
     ['timeupdate', 'loadedmetadata', 'play', 'pause', 'volumechange', 'ratechange'].forEach(function (name) { listen(video, name, update); });
-    listen(button, 'click', toggle); listen(button, 'focus', reveal); listen(bar, 'focusin', reveal);
+    listen(button, 'click', toggle); listen(button, 'focus', reveal);
+    listen(teslaButton, 'click', launchTheater); listen(teslaButton, 'focus', reveal); listen(bar, 'focusin', reveal);
     listen(bar, 'dblclick', function (event) { event.stopPropagation(); });
     listen(stage, 'dblclick', toggle); listen(stage, 'pointermove', movement);
     listen(stage, 'touchstart', reveal); listen(document, 'keydown', key);
