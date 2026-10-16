@@ -793,8 +793,7 @@ function setupIntroToggle(text, button) {
 async function vDetail(sid) {
   renderGtabs(true);
   const el = $('#view');
-  const randomFrame = random ? CodingRandomPlay.frame() : '';
-  el.innerHTML = randomFrame ? `<div class="watch"><div class="stage">${randomFrame}</div></div>` : loadingHTML;
+  el.innerHTML = loadingHTML;
   let d;
   try { d = await api('/episodes?series_id=' + sid); }
   catch (e) { if (location.hash === '#/detail/' + sid) el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
@@ -874,7 +873,8 @@ const W = { sid: null, eps: [], meta: null, ep: 1, auto: true, speed: 1, saveT: 
 async function vWatch(sid, ep, resumeAt, random = false) {
   renderGtabs(true);
   const el = $('#view');
-  el.innerHTML = loadingHTML;
+  const randomFrame = random ? CodingRandomPlay.frame() : '';
+  el.innerHTML = randomFrame ? `<div class="watch"><div class="stage">${randomFrame}</div></div>` : loadingHTML;
   const preparedRandom = random ? CodingRandomPlay.takePrepared(sid) : null;
   let eps = preparedRandom?.episodes || cache.eps[sid], meta = preparedRandom?.meta || cache.meta?.[sid];
   if (preparedRandom) {

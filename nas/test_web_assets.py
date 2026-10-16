@@ -102,6 +102,10 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn('CodingRandomPlay.takePrepared(sid)', page)
         self.assertIn('CodingRandomPlay.frame()', page)
         self.assertIn('randomFrame ? `<div class="watch"><div class="stage">${randomFrame}</div></div>` : loadingHTML', page)
+        detail = page[page.index('async function vDetail'):page.index('/* ================= 视图: 播放 ================= */')]
+        watch = page[page.index('async function vWatch'):page.index('W.bind =')]
+        self.assertNotIn('randomFrame', detail)
+        self.assertIn("const randomFrame = random ? CodingRandomPlay.frame() : '';", watch)
         self.assertIn('CodingRandomPlay.clearFrame()', page)
         self.assertIn('.random-transition-frame', web.joinpath('assets', 'library.css').read_text())
         self.assertIn("navigator.sendBeacon('/playback/close'", random_play)
