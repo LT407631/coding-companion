@@ -197,10 +197,18 @@
     if (hash && hash !== '#' && hash !== '#/discover') { location.hash='#/discover'; return true; }
     return false;
   }
+  function randomKey(code) {
+    var random=window.CodingRandomPlay;
+    if(!random||typeof random.active!=='function'||!random.active()) return false;
+    if(code===19||code===20) {random.shift(code===19?-1:1);return true;}
+    if(code===23||code===66) {random.accept(typeof W==='undefined'?null:W);return true;}
+    return false;
+  }
   function key(code) {
     var dirs={19:'up',20:'down',21:'left',22:'right'}, el=document.activeElement, v=player();
     if (code===4) return back();
     backDeadline=0;backPage='';
+    if(randomKey(code)) return true;
     if (code===82) {
       if(v&&/^#\/watch\//.test(location.hash)) {stopSearchEditing();fullscreen();}
       return true;
