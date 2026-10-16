@@ -41,8 +41,12 @@
   // Only browser playback: TV owns its native transition and rendering feedback.
   function pageFullscreen(video, hideControls, showControls) {
     var stage = video && video.parentElement;
-    if (!stage || stage.id !== 'stage' || !(stage.requestFullscreen || stage.webkitRequestFullscreen) ||
-        !(document.fullscreenEnabled || document.webkitFullscreenEnabled)) return null;
+    var userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent || '';
+    var tesla = /\bTesla(?:Browser)?\/[\d.]+/i.test(userAgent) || /\bQtCarBrowser\b/i.test(userAgent);
+    var theater = tesla && typeof location !== 'undefined' && /(?:^|[?&])tesla_theater=1(?:&|$)/.test(location.search || '');
+    var fullscreen = stage && (stage.requestFullscreen || stage.webkitRequestFullscreen) &&
+      (document.fullscreenEnabled || document.webkitFullscreenEnabled);
+    if (!stage || stage.id !== 'stage' || (!tesla && !fullscreen)) return null;
     if (!document.getElementById('coding-page-fullscreen-style')) {
       var style = document.createElement('style'); style.id = 'coding-page-fullscreen-style';
       style.textContent = '.coding-page-fullscreen{position:relative}' +
@@ -51,6 +55,10 @@
         '.coding-media-bar{position:absolute;bottom:16px;left:16px;right:16px;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border-radius:12px;background:#14141eee;color:#fff;font:13px sans-serif;opacity:0;pointer-events:none;transition:opacity .15s}' +
         '.coding-media-bar.is-visible{opacity:1;pointer-events:auto}' +
         '.coding-media-bar input{min-width:0;accent-color:#ff4b7d}.coding-seek{flex:1;width:80px}.coding-volume{width:70px}.coding-media-time{white-space:nowrap}' +
+        'html.coding-tesla-theater body{margin:0!important;overflow:hidden!important;background:#000!important}' +
+        'html.coding-tesla-theater #stage{position:fixed!important;inset:0!important;z-index:2147483000!important;width:100vw!important;height:100vh!important;height:100dvh!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;background:#000}' +
+        'html.coding-tesla-theater #stage video{position:absolute;inset:0;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;object-fit:contain}' +
+        'html.coding-tesla-theater .coding-fullscreen-button{display:none!important}' +
         '@media(max-width:600px){.coding-media-bar{left:6px;right:6px;bottom:6px;padding:6px;gap:4px}.coding-media-bar .coding-volume{display:none}.coding-media-bar button,.coding-media-bar select{padding:6px;font-size:12px}}';
       [':fullscreen', ':-webkit-full-screen'].forEach(function (pseudo) {
         var selector = '.coding-page-fullscreen' + pseudo;
@@ -71,7 +79,8 @@
       bar.appendChild(node); return node;
     }
     button.type = 'button'; button.className = 'coding-fullscreen-button';
-    button.textContent = '全屏'; button.setAttribute('aria-label', '进入全屏');
+    button.textContent = tesla && !theater ? '隐藏地址栏' : '全屏';
+    button.setAttribute('aria-label', tesla && !theater ? '进入特斯拉影院全屏' : '进入全屏');
     bar.className = 'coding-media-bar'; bar.setAttribute('aria-label', '播放控制');
     var play = control('button', '播放'), seek = control('input', '播放进度', 'coding-seek');
     seek.type = 'range'; seek.min = '0'; seek.max = '1000'; seek.step = '1'; seek.value = '0';
@@ -90,6 +99,7 @@
     }
     if (video.webkitShowPlaybackTargetPicker) { var airplay = control('button', '投屏'); listen(airplay, 'click', function () { video.webkitShowPlaybackTargetPicker(); }); }
     stage.classList.add('coding-page-fullscreen'); stage.appendChild(button); stage.appendChild(bar);
+    if (theater) document.documentElement.classList.add('coding-tesla-theater');
     video.controls = false;
     function active() { return (document.fullscreenElement || document.webkitFullscreenElement) === stage; }
     function hide() { clearTimeout(timer); button.classList.remove('is-visible'); bar.classList.remove('is-visible'); }
@@ -115,8 +125,19 @@
       reveal();
     }
     function failed() { if (!stopped) { showControls(); stop(); } }
+    function theaterTarget() {
+      var href = String(location.href), hash = String(location.hash || '');
+      var base = hash ? href.slice(0, -hash.length) : href;
+      var join = base.indexOf('?') < 0 ? '?' : /[?&]$/.test(base) ? '' : '&';
+      return base + join + 'tesla_theater=1' + hash;
+    }
     function toggle(event) {
       if (event) { event.preventDefault(); event.stopPropagation(); }
+      if (tesla && !theater) {
+        window.open('https://www.youtube.com/redirect?q=' + encodeURIComponent(theaterTarget()), '_blank');
+        return;
+      }
+      if (theater) { reveal(); return; }
       try {
         var result = active() ? (document.exitFullscreen || document.webkitExitFullscreen).call(document) :
           (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
@@ -142,6 +163,7 @@
       stopped = true; adapter.enabled = false; clearTimeout(timer);
       listeners.forEach(function (item) { item[0].removeEventListener(item[1], item[2]); });
       button.remove(); bar.remove(); stage.classList.remove('coding-page-fullscreen', 'coding-controls-quiet'); video.controls = originalControls;
+      if (theater) document.documentElement.classList.remove('coding-tesla-theater');
     }
     listen(play, 'click', togglePlay); listen(video, 'click', togglePlay);
     listen(seek, 'input', function () { if (isFinite(video.duration)) video.currentTime = Number(seek.value) / 1000 * video.duration; reveal(); });

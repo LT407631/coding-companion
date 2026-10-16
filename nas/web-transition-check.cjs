@@ -55,6 +55,7 @@ if(!process.env.FULLSCREEN_SAFARI_QA)(async()=>{
   assert.equal(await page.locator('#vload').evaluate(e=>e.style.display),'flex');
   await page.evaluate(()=>{W.stop()});
   await fullscreenCheck(browser);
+  await teslaTheaterCheck(browser);
   console.log('PASS: Chrome production W.bind first feedback; cached automatic source set while prepare pending; no short spinner or native-control flash; user input restores controls; prolonged waiting restores feedback; exit cleanup');
  } finally {await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});
@@ -143,5 +144,26 @@ async function fullscreenCheck(browser){
   await page.evaluate(()=>W.stop());
   console.log('PASS: real video naturally ends twice; slow completion + new source stay in container fullscreen without controls; movement/keyboard/F and teardown');
  } finally{await page.close();fixture.server.close()}
+}
+async function teslaTheaterCheck(browser){
+ const fixture=await fullscreenFixture();
+ const context=await browser.newContext({userAgent:'Mozilla/5.0 (X11; GNU/Linux) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36 Tesla/2026.32.3'});
+ const page=await context.newPage();page.setDefaultTimeout(10000);
+ await page.addInitScript(()=>{window.open=(url,target)=>{window.qaOpen={url,target};return {}}});
+ try{
+  await page.goto(fixture.url);await page.waitForFunction(()=>W.mediaReady);
+  const button=page.getByRole('button',{name:'进入特斯拉影院全屏'});
+  await button.click();
+  const opened=await page.evaluate(()=>window.qaOpen),launch=new URL(opened.url),target=new URL(launch.searchParams.get('q'));
+  assert.equal(opened.target,'_blank','Tesla Theater must open separately so the normal browser remains available');
+  assert.equal(launch.origin,'https://www.youtube.com');assert.equal(launch.pathname,'/redirect');
+  assert.equal(target.origin,fixture.url);assert.equal(target.searchParams.get('tesla_theater'),'1');
+  await page.goto(target.href);await page.waitForFunction(()=>W.mediaReady);
+  assert.equal(await page.locator('html').evaluate(el=>el.classList.contains('coding-tesla-theater')),true,'redirect target must enable the Tesla Theater player layout');
+  assert.equal(await page.locator('.coding-fullscreen-button').isVisible(),false,'Theater layout must not offer the browser-only fullscreen action again');
+  const box=await page.locator('#stage').boundingBox(),viewport=page.viewportSize();
+  assert.deepEqual({x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)},{x:0,y:0,width:viewport.width,height:viewport.height},'Theater target must fill the Tesla content area without page chrome');
+  console.log('PASS: Tesla browser opens an encoded Theater target in a separate surface and the marked target becomes a full-viewport player');
+ } finally{await page.close();await context.close();fixture.server.close()}
 }
 if(process.env.FULLSCREEN_SAFARI_QA){fullscreenFixture().then(({url})=>console.log('Safari local fixture: '+url));}
