@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -54,6 +55,52 @@ class NasIntegrationTests(unittest.TestCase):
     def tearDown(self):
         self.module.catalog.close()
         self.tmp.cleanup()
+
+    def episode_fixture(self, count):
+        payload = {'meta': {'series_id': '7', 'title': '待更新第七季', 'episode_cnt': count},
+                   'episodes': [{'index': n + 1, 'vid': str(101 + n)} for n in range(count)]}
+        def original(series_id: str):
+            return payload
+        self.app.router.routes = [r for r in self.app.router.routes if getattr(r, 'path', '') != '/episodes']
+        self.app.add_api_route('/episodes', self.module.cached_endpoint('/episodes', original), methods=['GET'])
+        return payload
+
+    def wait_catalog(self):
+        for _ in range(200):
+            with self.module.catalog.guard:
+                if not self.module.catalog.pending: return
+            time.sleep(.005)
+        self.fail('catalog did not finish refreshing')
+
+    def test_empty_episode_snapshot_rechecks_in_a_minute_and_can_become_playable(self):
+        payload = self.episode_fixture(0)
+        status, _, _ = self.request('/episodes?series_id=7', cookie=self.cookie)
+        self.assertEqual(status, 200)
+        self.module.catalog.db.execute('UPDATE entries SET checked=?', (time.time() - 61,))
+        self.module.catalog.db.commit()
+        payload['episodes'] = [{'index': 1, 'vid': '101'}]
+        payload['meta']['episode_cnt'] = 1
+        self.request('/episodes?series_id=7', cookie=self.cookie)
+        self.wait_catalog()
+        _, _, raw = self.request('/episodes?series_id=7', cookie=self.cookie)
+        self.assertEqual(len(json.loads(raw)['episodes']), 1)
+
+    def test_transient_empty_response_does_not_replace_playable_snapshot(self):
+        payload = self.episode_fixture(1)
+        self.request('/episodes?series_id=7', cookie=self.cookie)
+        payload['episodes'] = []
+        payload['meta']['episode_cnt'] = 0
+        self.request('/episodes?series_id=7&refresh=true', cookie=self.cookie)
+        self.wait_catalog()
+        _, _, raw = self.request('/episodes?series_id=7', cookie=self.cookie)
+        self.assertEqual(len(json.loads(raw)['episodes']), 1)
+
+    def test_declared_episodes_with_empty_list_are_not_cached_as_success(self):
+        payload = self.episode_fixture(2)
+        payload['episodes'] = []
+        status, _, _ = self.request('/episodes?series_id=7', cookie=self.cookie)
+        self.assertEqual(status, 502)
+        self.assertIsNone(self.module.catalog.read('/episodes:{"series_id":"7"}'))
 
     def test_private_search_paging_and_legacy_contract(self):
         # Compatibility behavior remains testable but is no longer production's source policy.

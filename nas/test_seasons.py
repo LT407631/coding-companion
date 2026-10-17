@@ -41,6 +41,40 @@ def row(sid, title):
 
 
 class SeasonsTests(unittest.TestCase):
+    def test_later_season_without_album_discovers_related_playable_seasons(self):
+        h = FakePlatform({'7': {**video('新世界第七季', 7, None), 'episode_cnt': 0},
+                          '1': video('新世界', 1), '2': video('新世界第二季', 2),
+                          'other': video('另一个新世界第二季', 2)}, {})
+        queries = []
+        def search(query):
+            queries.append(query)
+            return [row('1', '新世界'), row('2', '新世界第二季'), row('other', '另一个新世界第二季')]
+        result = get_seasons(h, '7', search_hint='第二季',
+                             fallback=SimpleNamespace(search=search), website_only=True)
+        self.assertEqual([x['series_id'] for x in result['items']], ['1', '2', '7'])
+        self.assertEqual(queries[0], '新世界')
+        self.assertTrue(result['partial'])
+        self.assertEqual(result['membership'], 'title')
+        self.assertEqual(result['album_id'], '', 'Title evidence must not invent a platform album')
+        self.assertFalse(result['items'][-1]['available'])
+
+    def test_missing_album_does_not_combine_ambiguous_adaptations(self):
+        h = FakePlatform({'3': video('新世界第三季', 3, None),
+                          '1': video('新世界', 1, 'adaptation-a'),
+                          '2': video('新世界第二季', 2, 'adaptation-b')}, {})
+        fallback = SimpleNamespace(search=lambda query: [row('1', '新世界'), row('2', '新世界第二季')])
+        data = get_seasons(h, '3', fallback=fallback, website_only=True)
+        self.assertEqual([x['series_id'] for x in data['items']], ['3'])
+        self.assertTrue(data['partial'])
+
+    def test_website_discovery_uses_title_root_before_broad_search_hint(self):
+        h = FakePlatform({'1': video('新世界', 1), '2': video('新世界第二季', 2)}, {})
+        def search(query):
+            return [row('2', '新世界第二季')] if query == '新世界' else []
+        data = get_seasons(h, '1', search_hint='第二季',
+                           fallback=SimpleNamespace(search=search), website_only=True)
+        self.assertEqual([x['season'] for x in data['items']], [1, 2])
+
     def test_website_only_uses_metadata_but_never_legacy_search(self):
         h = FakePlatform({'1': video('故事第一季', 1), '2': video('故事第二季', 2)}, {})
         fallback = SimpleNamespace(search=lambda query: [row('2', '故事第二季')])
@@ -254,6 +288,30 @@ class DiskCacheTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_title_related_result_never_remaps_authoritative_album_members(self):
+        cache = SeasonCache(self.path)
+        cache.put('1', self.data)
+        related = {**self.data, 'album_id': '', 'membership': 'title', 'partial': True,
+                   'items': self.data['items'] + [{'series_id': '7', 'season': 7, 'episode_cnt': 0}]}
+        cache.put('7', related)
+        self.assertEqual(cache._series['1'], 'album:original')
+        self.assertEqual(cache._series['7'], 'series:7')
+        self.assertEqual(SeasonCache(self.path).get(None, '2')['album_id'], 'original')
+
+    def test_unavailable_current_season_does_not_keep_negative_cache_for_a_day(self):
+        cache = SeasonCache(self.path)
+        data = {'items': [{'series_id': '7', 'season': 7, 'episode_cnt': 0, 'available': False}],
+                'album_id': '', 'partial': True, 'membership': 'title'}
+        cache.put('7', data)
+        cache._groups['series:7']['updated_at'] -= 61
+        with patch('seasons.get_seasons', return_value=data) as fetch:
+            result = cache.get(None, '7')
+            for _ in range(200):
+                if not cache._jobs: break
+                time.sleep(.005)
+            fetch.assert_called_once()
+        self.assertTrue(result['refreshing'])
 
     def test_slow_cold_series_does_not_block_another_series(self):
         cache = SeasonCache(self.path)

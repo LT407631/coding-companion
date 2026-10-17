@@ -79,6 +79,14 @@ install_watch_updates(app, None, resolve=watch_profiles.updates)
 TTL = {"/filters": 86400, "/rank": 1800, "/latest": 900, "/browse": 900, "/episodes": 21600}
 
 
+def episode_ttl(entry):
+    if entry is not None:
+        import json
+        if not json.loads(entry.body).get('episodes'):
+            return 60
+    return TTL['/episodes']
+
+
 def cached_endpoint(path, original):
     @wraps(original)
     def cached(**values):
@@ -93,9 +101,19 @@ def cached_endpoint(path, original):
                 if path in {"/rank", "/episodes"}:
                     parts = ("rank", values["board"], values["limit"]) if path == "/rank" else ("episodes", str(values["series_id"]))
                     h.SG.cache_set(h.SG.cache_key(*parts), None, ttl=0)
-            return Payload(json_bytes(original(**values)))
+            data = original(**values)
+            if path == '/episodes':
+                import json
+                if not isinstance(data.get('episodes'), list) or not data.get('meta', {}).get('title'):
+                    raise ValueError('Invalid episode detail')
+                if not data['episodes'] and int(data['meta'].get('episode_cnt') or 0) > 0:
+                    raise ValueError('Incomplete episode response')
+                if not data['episodes'] and previous and json.loads(previous.body).get('episodes'):
+                    raise ValueError('Empty refresh cannot replace playable episodes')
+            return Payload(json_bytes(data))
         try:
-            entry, state = catalog.get(key, load, TTL[path], refresh)
+            ttl = episode_ttl(catalog.read(key)) if path == '/episodes' else TTL[path]
+            entry, state = catalog.get(key, load, ttl, refresh)
         except HTTPException:
             raise
         except Exception as exc:

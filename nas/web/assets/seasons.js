@@ -25,7 +25,7 @@ async function loadSeasons(sid, slot, refresh = false, keepContent = false) {
   try {
     const data = await fetchSeasons(sid, refresh);
     if (!slot.isConnected || location.hash !== '#/detail/' + sid) return;
-    slot.innerHTML = `<h3>全部季（${data.items.length}）</h3><div class="season-list"></div>`;
+    slot.innerHTML = `<h3>${data.membership === 'title' ? '相关季' : '全部季'}（${data.items.length}）</h3><div class="season-list"></div>`;
     const refreshButton = document.createElement('button'); refreshButton.className = 'season-retry';
     refreshButton.type = 'button'; refreshButton.textContent = '刷新季列表';
     refreshButton.disabled = !!data.refreshing;
@@ -36,7 +36,7 @@ async function loadSeasons(sid, slot, refresh = false, keepContent = false) {
       const button = document.createElement('button');
       const current = String(item.series_id) === String(sid);
       button.type = 'button'; button.className = 'season-btn' + (current ? ' on' : '');
-      button.textContent = (item.season ? '第' + item.season + '季' : item.title) + (current ? ' · 当前' : '');
+      button.textContent = (item.season ? '第' + item.season + '季' : item.title) + (current ? ' · 当前' : '') + (item.available === false ? ' · 暂无剧集' : '');
       button.title = item.title + ' · 全' + item.episode_cnt + '集';
       if (current) button.setAttribute('aria-current', 'page');
       button.onclick = () => go('#/detail/' + item.series_id);
@@ -46,7 +46,8 @@ async function loadSeasons(sid, slot, refresh = false, keepContent = false) {
       const note = document.createElement('div'); note.className = 'season-note';
       note.textContent = data.refreshing ? '已显示缓存，正在后台更新…' : data.refresh_error ? '更新失败，已保留缓存。' :
         data.cached ? '已缓存，下次打开直接读取。' : '季列表已保存到 NAS。';
-      if (!data.refreshing && data.partial) note.textContent += ' 列表可能不完整，可手动刷新。';
+      if (data.membership === 'title') note.textContent += ' 当前季暂缺平台关联，其他季按同名查找。';
+      else if (!data.refreshing && data.partial) note.textContent += ' 列表可能不完整，可手动刷新。';
       if (!data.refreshing && !data.partial && data.items.length <= 1) note.textContent += ' 暂未找到其他季。';
       slot.appendChild(note);
     }
@@ -73,7 +74,8 @@ async function bindNextSeasonButton(sid, button, onChange) {
   try {
     const data = await fetchSeasons(sid);
     if (!button.isConnected || !location.hash.startsWith('#/watch/' + sid + '/')) return;
-    const items = Array.isArray(data.items) ? data.items.slice() : [];
+    if (data.membership === 'title') { onChange?.(null); return null; }
+    const items = Array.isArray(data.items) ? data.items.filter(item => item.available !== false) : [];
     const current = items.find(item => String(item.series_id) === String(sid));
     if (!current) return;
     const currentSeason = Number(current.season) || 0;

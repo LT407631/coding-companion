@@ -6,9 +6,10 @@ from pathlib import Path
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 
 
-SCAN_VERSION = 5
+SCAN_VERSION = 6
 MAX_CANDIDATES = 120
 
 
@@ -53,7 +54,10 @@ class SeasonCache:
                 data = {**data, "partial": True, "items": sorted(members.values(), key=_sort_key)}
             groups[key] = {"updated_at": time.time(), "data": data, "scan_version": SCAN_VERSION, "search_hint": search_hint or data.get("lookup_query", "")}
             for item in data["items"]:
-                series[str(item["series_id"])] = key
+                # Title-only suggestions belong to this detail, never to the
+                # authoritative album index of the other series.
+                if data.get('membership') != 'title' or str(item['series_id']) == sid:
+                    series[str(item["series_id"])] = key
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temp_path = None
             try:
@@ -78,6 +82,9 @@ class SeasonCache:
             if not record or not any(str(item["series_id"]) == sid for item in record["data"]["items"]):
                 return None
             ttl = min(self.ttl, 600) if record["data"].get("partial") else self.ttl
+            if any(str(item['series_id']) == sid and item.get('available') is False
+                   for item in record['data']['items']):
+                ttl = min(ttl, 60)
             stale = (bool(search_hint) and (record["data"].get("partial") or len(record["data"]["items"]) <= 1) and record.get("search_hint") != search_hint) or record.get("scan_version") != SCAN_VERSION or time.time() - record["updated_at"] >= ttl
             if (refresh or stale) and key not in self._jobs:
                 if refresh or time.time() >= self._retry_after.get(key, 0):
@@ -183,7 +190,8 @@ def _sort_key(item):
 def _item(sid, video):
     return {"series_id": sid, "title": video.get("series_title") or "",
             "season": int(video.get("season_index") or 0),
-            "episode_cnt": video.get("episode_cnt") or 0}
+            "episode_cnt": video.get("episode_cnt") or 0,
+            "available": int(video.get("episode_cnt") or 0) > 0}
 
 
 def _website_ids(fallback, query):
@@ -191,14 +199,58 @@ def _website_ids(fallback, query):
             if isinstance(row, dict) and re.fullmatch(r'\d{1,24}', str(row.get('series_id') or ''))}
 
 
+def _website_candidates(fallback, root, query):
+    queries = list(dict.fromkeys(value for value in (root, query) if value and _root(value)))
+    if len(queries) == 1:
+        return _website_ids(fallback, queries[0])
+    # The root title and an alias are independent discovery hints. A broad
+    # search such as "第二季" must never replace the series' own title query.
+    pool = ThreadPoolExecutor(max_workers=2)
+    tasks = [pool.submit(_website_ids, fallback, value) for value in queries]
+    try:
+        done, pending = wait(tasks, timeout=25)
+        for task in pending:
+            task.cancel()
+        ids, error, successes = set(), None, 0
+        for task in tasks:
+            if task not in done:
+                continue
+            try:
+                ids.update(sorted(task.result() - ids)[:max(0, MAX_CANDIDATES - 1 - len(ids))])
+                successes += 1
+            except Exception as exc:
+                error = exc
+        if not successes:
+            raise error or TimeoutError('官网季候选查询超时')
+        return ids
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def _title_related(videos, sid, root):
+    def normalized(title, season):
+        return re.sub(r'[\W_]+', '', _root(title, season)).casefold()
+    expected = normalized(root, 0)
+    peers = {key: row for key, row in videos.items() if key != sid
+             and int(row.get('season_index') or 0) > 0
+             and normalized(row.get('series_title') or '', int(row.get('season_index') or 0)) == expected}
+    albums = {str(row['related_album_id']) for row in peers.values() if row.get('related_album_id')}
+    # Without a platform relation, conflicting adaptations cannot be resolved
+    # safely. Keep the current detail and mark the lookup incomplete.
+    if len(albums) != 1:
+        return [_item(sid, videos[sid])]
+    return sorted([_item(sid, videos[sid])] + [_item(key, row) for key, row in peers.items()
+                  if str(row.get('related_album_id') or '') in albums], key=_sort_key)
+
+
 def get_seasons(h, sid, refresh=False, search_hint="", fallback=None, website_only=False):
     current = _detail(h, [sid]).get(sid)
     if not current:
         raise ValueError("剧集不存在")
     album = str(current.get("related_album_id") or "")
-    if not album:
+    if not album and not int(current.get('season_index') or 0):
         return {"items": [_item(sid, current)], "partial": False, "album_id": ""}
-    key = h.SG.cache_key("nas-seasons-v5", album)
+    key = h.SG.cache_key("nas-seasons-v6", album or 'series:' + sid)
     cached = h.SG.cache_get(key)
     if not refresh and cached is not None and (not search_hint or cached.get("lookup_query") == search_hint) and any(str(item["series_id"]) == sid for item in cached["items"]):
         return cached
@@ -211,7 +263,7 @@ def get_seasons(h, sid, refresh=False, search_hint="", fallback=None, website_on
     visited = set()
     partial = False
     if website_only:
-        ids.update(_website_ids(fallback, query_title))
+        ids.update(_website_candidates(fallback, root, query_title))
         partial = True
     for _ in range(0 if website_only else 12):
         token = (str(offset), passback)
@@ -273,8 +325,13 @@ def get_seasons(h, sid, refresh=False, search_hint="", fallback=None, website_on
         videos.update(rows)
     items = [_item(item_sid, video) for item_sid, video in videos.items()
              if str(video.get("related_album_id") or "") == album]
+    if not album:
+        items = _title_related(videos, sid, root)
+        partial = True
     items.sort(key=_sort_key)
     partial = partial or (len(items) <= 1 and int(current.get("season_index") or 0) > 1)
     result = {"items": items, "partial": partial, "album_id": album, "lookup_query": query_title}
+    if not album:
+        result['membership'] = 'title'
     h.SG.cache_set(key, result, ttl=600 if not partial else 60)
     return result

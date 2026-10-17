@@ -800,7 +800,7 @@ async function vDetail(sid) {
   if (location.hash !== '#/detail/' + sid) return;
   cache.eps[sid] = d.episodes;
   (cache.meta = cache.meta || {})[sid] = d.meta;
-  const m = d.meta;
+  const m = d.meta, hasEpisodes = d.episodes.length > 0;
   const cat = catDots(m.category, 4);
   const rec = hist.get(sid);
   const isFav = favs.has(sid);
@@ -812,10 +812,10 @@ async function vDetail(sid) {
         <h1>${esc(m.title)}</h1>
         <div class="hmeta">
           ${m.score ? `<span><b>${esc(m.score)}分</b></span><span class="sep">|</span>` : ''}
-          <span>全 ${m.episode_cnt} 集</span><span class="sep">|</span>
+          <span>${hasEpisodes ? '全 ' + m.episode_cnt + ' 集' : '暂无可播剧集'}</span><span class="sep">|</span>
           <span>${fmtW(m.play_cnt)}次播放</span>
           ${m.followed_cnt ? `<span class="sep">|</span><span>${fmtW(m.followed_cnt)}收藏</span>` : ''}
-          ${m.status ? `<span class="sep">|</span><span>${esc(m.status)}</span>` : ''}
+          ${hasEpisodes && m.status ? `<span class="sep">|</span><span>${esc(m.status)}</span>` : ''}
         </div>
         ${cat ? `<div class="hmeta" style="margin-top:8px">${esc(cat)}</div>` : ''}
         </div>
@@ -825,11 +825,11 @@ async function vDetail(sid) {
         </div>
         <section class="seasons" id="seasons" aria-label="全部季"></section>
         <div class="hbtns">
-          ${rec ? `<button class="btn-pink" onclick="go('#/watch/${sid}/${rec.ep}')">
+          ${hasEpisodes && rec ? `<button class="btn-pink" onclick="go('#/watch/${sid}/${rec.ep}')">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13c0 .8.9 1.3 1.6.9l10.2-6.5c.6-.4.6-1.4 0-1.8L9.6 4.6c-.7-.4-1.6.1-1.6.9z"/></svg>
             ${rec.finished ? '重新看' : '继续看'} 第${rec.ep}集${!rec.finished && rec.pos > 0 ? ' · ' + fmtT(rec.pos) : ''}</button>` : ''}
           <button class="btn-pink" ${rec ? 'style="background:var(--surface);color:var(--txt-control);border:1px solid var(--line);font-weight:500"' : ''}
-                  onclick="go('#/watch/${sid}/1/0')">${rec ? '从头看' : '播放第1集'}</button>
+                  ${hasEpisodes ? `onclick="go('#/watch/${sid}/1/0')"` : 'disabled'}>${hasEpisodes ? (rec ? '从头看' : '播放第1集') : '暂无可播剧集'}</button>
           <button class="btn-line ${isFav?'on':''}" id="favbig" onclick="toggleFavBig('${sid}')">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="${isFav?PINK:'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.2L6 21V4z"/></svg>
             ${isFav ? '已收藏' : '收藏'}</button>
@@ -837,7 +837,7 @@ async function vDetail(sid) {
       </div>
     </div>
     <div class="epswrap">
-      <h3>选集（${d.episodes.length}）</h3>
+      <h3>${hasEpisodes ? '选集（' + d.episodes.length + '）' : '当前季暂未提供剧集，可先选择其他季'}</h3>
       <div class="eps">
         ${d.episodes.map(e => {
           const seen = rec && (e.index < rec.ep || (e.index === rec.ep && rec.pos > (rec.dur||1e9) * 0.9));
