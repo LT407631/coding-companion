@@ -201,7 +201,7 @@
     var random=window.CodingRandomPlay;
     if(!random||typeof random.active!=='function'||!random.active()) return false;
     if(code===19||code===20) {random.shift(code===19?-1:1);return true;}
-    if(code===23||code===66) {random.accept(typeof W==='undefined'?null:W);return true;}
+    if(code===23||code===66) {(random.confirm||random.accept)(typeof W==='undefined'?null:W);return true;}
     return false;
   }
   function key(code) {

@@ -2,8 +2,10 @@
   'use strict';
   var KEY = 'hg_random_preview_v1';
   var POOL_SIZE = 10;
+  var CONFIRM_WINDOW = 2000;
   var state = read();
   var busy = false, refillPromise = null, transitionFrame = '', transitionCover = false, handoff = null;
+  var confirmTimer = null, confirmDeadline = 0, confirmWatch = null, confirmWasPlaying = false;
   var poolToken = token(), poolGeneration = 0, poolActive = 0, poolQueue = [];
   var poolClients = new Map(), poolWanted = new Set(), prepared = new Map();
 
@@ -227,7 +229,14 @@
     finally { busy = false; if (button && button.isConnected) button.removeAttribute('aria-busy'); }
   }
   function startCurrent(button) { return start(currentContext(), button); }
+  function cancelConfirm(resume) {
+    var watch = confirmWatch, video = watch && watch.video, wasPlaying = confirmWasPlaying;
+    if (confirmTimer) clearTimeout(confirmTimer);
+    confirmTimer = null; confirmDeadline = 0; confirmWatch = null; confirmWasPlaying = false;
+    if (resume && wasPlaying && video && video.paused && !video.ended && active()) video.play().catch(function () {});
+  }
   async function shift(direction) {
+    cancelConfirm(true);
     if (busy || !active()) return;
     direction = direction < 0 ? -1 : 1;
     var target = state.index + direction;
@@ -310,7 +319,25 @@
       finished ? '#/detail/' + w.sid : '#/watch/' + w.sid + '/1/' + Math.max(0, Math.floor(position));
     history.replaceState({codingRoute: true}, '', hash); route();
   }
-  function routeState(isRandom) { if (!isRandom) { closePool(); closeHandoff(); clearFrame(); } }
+  function confirmSelection(w) {
+    if (!active() || !w || !w.random || !w.sid) return;
+    var now = Date.now();
+    if (confirmWatch === w && confirmDeadline && now <= confirmDeadline) {
+      cancelConfirm(false); accept(w); return;
+    }
+    cancelConfirm(true);
+    var video = w.video;
+    confirmWatch = w; confirmWasPlaying = !!(video && !video.paused && !video.ended);
+    confirmDeadline = now + CONFIRM_WINDOW;
+    if (confirmWasPlaying) video.pause();
+    toast('已暂停，再按一次确认进入当前剧集');
+    confirmTimer = setTimeout(function () {
+      if (confirmWatch !== w) return;
+      cancelConfirm(true);
+      if (active()) toast('已取消进入，继续试看');
+    }, CONFIRM_WINDOW);
+  }
+  function routeState(isRandom) { if (!isRandom) { cancelConfirm(false); closePool(); closeHandoff(); clearFrame(); } }
   function foregroundReady(sid) {
     if (handoff && handoff.sid === String(sid || '')) closeHandoff();
     syncPool(true);
@@ -321,13 +348,14 @@
     if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown' && event.key !== 'Enter') return;
     event.preventDefault(); event.stopImmediatePropagation();
-    if (event.key === 'Enter') accept(typeof W === 'undefined' ? null : W);
+    if (event.key === 'Enter') confirmSelection(typeof W === 'undefined' ? null : W);
     else shift(event.key === 'ArrowUp' ? -1 : 1);
   }
   document.addEventListener('keydown', key, true);
-  window.addEventListener('pagehide', closePool);
+  window.addEventListener('pagehide', function () { cancelConfirm(false); closePool(); });
   window.CodingRandomPlay = {start: start, startCurrent: startCurrent, shift: shift, controls: controls, frame: frame,
     takePrepared: takePrepared,
-    clearFrame: clearFrame, resume: resume, bind: bind, ended: ended, accept: accept, active: active, route: routeState,
+    clearFrame: clearFrame, resume: resume, bind: bind, ended: ended, accept: accept, confirm: confirmSelection,
+    active: active, route: routeState,
     foregroundReady: foregroundReady};
 })();
