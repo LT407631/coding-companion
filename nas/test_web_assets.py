@@ -80,10 +80,13 @@ class WebAssetsTest(unittest.TestCase):
     def test_random_preview_has_sidebar_entry_pool_and_no_history(self):
         web = Path(__file__).with_name('web')
         page = web.joinpath('app.html').read_text()
+        legacy_page = web.joinpath('app-legacy.html').read_text()
         library = web.joinpath('assets', 'library.js').read_text()
         random_play = web.joinpath('assets', 'random-play.js').read_text()
         self.assertNotIn('随机看一部', library)
-        self.assertIn('随便看看', page)
+        for rendered_page in (page, legacy_page):
+            self.assertIn('随便看', rendered_page)
+            self.assertNotIn('随便看看', rendered_page)
         self.assertLess(page.index('data-nav="random"'), page.index('data-nav="rank"'))
         self.assertIn('CodingRandomPlay.startCurrent(this)', page)
         self.assertIn('var POOL_SIZE = 10', random_play)

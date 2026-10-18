@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="net.codingcompanion.tv" android:versionCode="52" android:versionName="1.0.52">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="net.codingcompanion.tv" android:versionCode="53" android:versionName="1.0.53">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
